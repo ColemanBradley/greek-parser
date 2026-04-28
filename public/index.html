@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Greek Parser</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;1,400&family=Source+Sans+3:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="manifest" href="/manifest.json" />
+  <meta name="theme-color" content="#0e2f5c" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Greek Parser" />
+  <link rel="apple-touch-icon" href="/icons/icon-180.png" />
+  <link rel="apple-touch-icon" sizes="152x152" href="/icons/icon-152.png" />
+  <link rel="apple-touch-icon" sizes="167x167" href="/icons/icon-167.png" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/icons/icon-32.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="/icons/icon-16.png" />
+  <link rel="shortcut icon" href="/favicon.ico" />
+  <style>
+    :root {
+      --navy:      #0e2f5c;
+      --navy-mid:  #1a4a80;
+      --navy-lite: #fdf5e4;
+      --navy-pale: #fdf5e4;
+      --amber:     #ffca6e;
+      --amber-mid: #f0b830;
+      --ink:       #1c2b3a;
+      --ink-mid:   #6b5a3a;
+      --ink-lite:  #b09070;
+      --border:    #e0d8c8;
+      --white:     #fff;
+      --bg:        #f5f0e8;
+      --green:     #2d6b5e;
+      --green-bdr: #a8d8cc;
+      --gold:      #b08000;
+      --red:       #c0392b;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; overflow: hidden; }
+    body { font-family: 'Source Sans 3', system-ui, sans-serif; background: var(--bg); color: var(--ink); display: flex; flex-direction: column; }
+
+    #hdr { flex-shrink: 0; background: var(--navy); height: 52px; display: flex; align-items: center; padding: 0 1rem; gap: 10px; }
+    .logo { width: 32px; height: 32px; border-radius: 8px; background: var(--amber); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .logo svg { width: 18px; height: 18px; }
+    .hdr-t { font-size: 0.9375rem; font-weight: 600; color: white; }
+    .hdr-s { font-size: 0.6875rem; color: rgba(255,255,255,0.5); }
+
+    #pg { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 1rem 0.875rem 1.5rem; }
+
+    #bbar { flex-shrink: 0; background: var(--white); border-top: 1px solid var(--border); padding: 0.625rem 0.875rem; padding-bottom: calc(0.625rem + env(safe-area-inset-bottom)); }
+    #parse-btn { width: 100%; padding: 0.85rem; background: var(--amber); color: var(--navy); border: none; border-radius: 9px; font-family: 'Source Sans 3', sans-serif; font-size: 0.875rem; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; -webkit-tap-highlight-color: transparent; }
+    #parse-btn:active { background: var(--amber-mid); }
+    #parse-btn:disabled { opacity: 0.45; }
+    #parse-btn svg { stroke: var(--navy); }
+
+    .card { background: var(--white); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 0.875rem; overflow: hidden; }
+    .card-hd { background: var(--navy-pale); border-bottom: 1px solid var(--border); padding: 0.6rem 1rem; display: flex; align-items: center; gap: 8px; }
+    .card-n { width: 1.25rem; height: 1.25rem; background: var(--navy); border-radius: 5px; display: flex; align-items: center; justify-content: center; font-size: 0.6875rem; font-weight: 600; color: white; flex-shrink: 0; }
+    .card-t { font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--navy); }
+    .card-b { padding: 1rem; }
+
+    .methods { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 0.5rem; margin-bottom: 0.875rem; }
+    .mbtn { border: 1.5px solid var(--border); border-radius: 8px; background: var(--white); padding: 0.75rem 0.4rem; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 5px; -webkit-tap-highlight-color: transparent; }
+    .mbtn.active { border-color: var(--navy); background: var(--navy-lite); }
+    .mbtn svg { width: 22px; height: 22px; stroke: var(--ink-lite); fill: none; stroke-width: 1.8; }
+    .mbtn.active svg { stroke: var(--navy); }
+    .mbtn span { font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink-lite); }
+    .mbtn.active span { color: var(--navy); }
+    input[type=file] { display: none; }
+
+    #img-stage { display: none; }
+    #thumb-wrap { position: relative; border-radius: 7px; overflow: hidden; border: 1.5px solid var(--border); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+    #thumb-wrap.cropped { border-color: var(--green-bdr); }
+    #thumb { display: block; width: 100%; max-height: 32vh; object-fit: contain; background: #111; }
+    #thumb-dim { position: absolute; inset: 0; background: rgba(0,0,0,0.32); display: flex; align-items: center; justify-content: center; }
+    #thumb-dim span { background: rgba(255,255,255,0.93); color: var(--navy); font-size: 0.8125rem; font-weight: 700; padding: 7px 16px; border-radius: 20px; }
+    #thumb-wrap.cropped #thumb-dim { display: none; }
+    .img-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; }
+    #recrop-btn { font-size: 0.75rem; font-weight: 600; color: var(--navy); background: none; border: none; cursor: pointer; padding: 0; text-decoration: underline; -webkit-tap-highlight-color: transparent; }
+    #remove-btn { font-size: 0.75rem; font-weight: 600; color: var(--red); background: none; border: none; cursor: pointer; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+    #txt-stage { display: none; }
+    #verse-stage { display: none; }
+    .verse-input-row { display: flex; gap: 0.5rem; }
+    #verse-ref {
+      flex: 1; border: 1.5px solid var(--border); border-radius: 8px;
+      padding: 0.75rem 0.875rem; font-family: 'Source Sans 3', sans-serif;
+      font-size: 1rem; color: var(--ink); background: var(--white);
+    }
+    #verse-ref:focus { outline: none; border-color: var(--navy); }
+    #verse-ref::placeholder { color: var(--ink-lite); }
+    #verse-lookup-btn {
+      padding: 0 1.1rem; background: var(--navy); color: white;
+      border: none; border-radius: 8px; font-size: 0.8125rem; font-weight: 600;
+      cursor: pointer; white-space: nowrap; -webkit-tap-highlight-color: transparent;
+      letter-spacing: 0.04em;
+    }
+    #verse-lookup-btn:active { background: var(--navy-mid); }
+    #verse-lookup-btn:disabled { opacity: 0.45; }
+    #verse-result {
+      display: none; margin-top: 0.75rem;
+      background: var(--navy-pale); border: 1px solid var(--border);
+      border-radius: 8px; padding: 0.875rem 1rem;
+    }
+    #verse-result-ref { font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--navy); margin-bottom: 0.4rem; }
+    #verse-result-text { font-family: 'Lora', serif; font-size: 1.15rem; color: var(--ink); line-height: 1.65; }
+    #verse-err { display: none; background: #fdf0ef; border: 1px solid #f0c0bc; border-radius: 6px; padding: 0.5rem 0.875rem; font-size: 0.8125rem; color: var(--red); margin-top: 0.5rem; }
+    #identify-btn {
+      width: 100%; margin-top: 0.6rem;
+      padding: 0.65rem; background: var(--navy-pale); color: var(--navy);
+      border: 1.5px solid var(--border); border-radius: 8px;
+      font-family: 'Source Sans 3', sans-serif; font-size: 0.8125rem; font-weight: 600;
+      cursor: pointer; -webkit-tap-highlight-color: transparent;
+      display: none;
+    }
+    #identify-btn:active { background: var(--amber); color: var(--navy); }
+    #greek-input { width: 100%; border: 1.5px solid var(--border); border-radius: 8px; padding: 0.75rem 0.875rem; font-family: 'Lora', Georgia, serif; font-size: 1.2rem; line-height: 1.6; color: var(--ink); background: var(--white); resize: none; min-height: 80px; }
+    #greek-input:focus { outline: none; border-color: var(--navy); }
+    #greek-input::placeholder { font-style: italic; color: var(--ink-lite); font-size: 1rem; }
+
+    #err { display: none; background: #fdf0ef; border: 1px solid #f0c0bc; border-radius: 6px; padding: 0.6rem 0.875rem; font-size: 0.8125rem; color: var(--red); margin-top: 0.75rem; }
+
+    #loading { display: none; text-align: center; padding: 2rem 1rem; }
+    .spin { width: 34px; height: 34px; border: 3px solid var(--border); border-top-color: var(--navy); border-radius: 50%; animation: sp 0.75s linear infinite; margin: 0 auto 0.75rem; }
+    @keyframes sp { to { transform: rotate(360deg); } }
+    .ltxt { font-size: 0.8125rem; color: var(--ink-lite); animation: fp 1.4s ease-in-out infinite; }
+    @keyframes fp { 0%,100%{opacity:0.4} 50%{opacity:1} }
+
+    #results { display: none; }
+    .wcards { display: flex; flex-direction: column; gap: 0.75rem; }
+    .wcard { background: var(--white); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; animation: si 0.25s ease both; }
+    @keyframes si { from{opacity:0;transform:translateY(5px)} to{opacity:1;transform:none} }
+    .wc-hd { padding: 0.8rem 1rem; background: var(--navy-pale); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .wc-gr { font-family: 'Lora', serif; font-size: 2rem; color: var(--navy); font-weight: 600; line-height: 1; }
+    .wc-lx { font-family: 'Lora', serif; font-size: 0.875rem; color: var(--ink-mid); font-style: italic; }
+    .wc-pos { margin-left: auto; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; background: var(--navy); color: white; padding: 0.125rem 0.5rem; border-radius: 4px; }
+    .wc-bd { padding: 1rem; }
+    .mgrid { display: grid; grid-template-columns: repeat(auto-fill,minmax(6.875rem,1fr)); gap: 0.45rem 0.875rem; margin-bottom: 0.75rem; }
+    .mkey { font-size: 0.6875rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.12em; color: var(--ink-lite); display: block; margin-bottom: 1px; }
+    .mval { font-size: 1.0625rem; font-weight: 500; color: var(--ink); }
+    .mval.na { color: var(--ink-lite); font-style: italic; font-weight: 400; font-size: 1rem; }
+    .mrow { border-top: 1px solid var(--border); padding-top: 0.6rem; display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem 0.875rem; }
+    .mmeank { font-size: 0.6875rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.12em; color: var(--ink-lite); display: block; margin-bottom: 2px; }
+    .mmeanv-i { font-family: 'Lora', serif; font-size: 1rem; color: var(--green); font-style: italic; }
+    .mmeanv-gr { font-family: 'Lora', serif; font-size: 1.375rem; color: var(--navy); font-weight: 600; display: block; line-height: 1.3; margin-bottom: 2px; }
+    .mmeanv-l { font-family: 'Lora', serif; font-size: 0.9375rem; color: var(--ink-mid); font-style: italic; display: block; }
+    .nbar { margin-top: 0.5rem; padding: 0.4rem 0.625rem; background: #fff8e8; border-left: 3px solid var(--gold); border-radius: 0 4px 4px 0; font-size: 0.75rem; color: #7a5500; line-height: 1.5; }
+    @media (max-width: 380px) { .mrow { grid-template-columns: 1fr; } }
+
+    /* ── Fullscreen crop overlay ── */
+    #fsc { display: none; position: fixed; inset: 0; z-index: 9999; background: #000; flex-direction: column; }
+    #fsc.open { display: flex; }
+    #fsc-top {
+      flex-shrink: 0; padding-top: env(safe-area-inset-top);
+      background: rgba(0,0,0,0.78);
+      height: calc(48px + env(safe-area-inset-top));
+      display: flex; align-items: center; justify-content: space-between;
+      padding-left: 1rem; padding-right: 1rem;
+    }
+    .fsc-title { color: white; font-size: 0.9375rem; font-weight: 600; }
+    .fsc-hint  { font-size: 0.6875rem; color: rgba(255,255,255,0.5); text-align: right; line-height: 1.4; }
+    #fsc-zone { flex: 1; position: relative; overflow: hidden; touch-action: none; }
+    #fsc-cv { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: crosshair; }
+    #fsc-bot {
+      flex-shrink: 0; background: rgba(0,0,0,0.82);
+      padding: 0.75rem 1rem;
+      padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));
+      display: flex; gap: 0.625rem; align-items: center;
+    }
+    .fsc-btn { flex: 1; padding: 0.8rem; border-radius: 9px; border: none; font-family: 'Source Sans 3', sans-serif; font-size: 0.875rem; font-weight: 600; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+    .fsc-btn.cancel  { background: rgba(255,255,255,0.12); color: rgba(255,255,255,0.8); flex: 0 0 auto; padding: 0.8rem 1.1rem; }
+    .fsc-btn.clr     { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.55); flex: 0 0 auto; padding: 0.8rem 1rem; font-size: 0.8125rem; display: none; }
+    .fsc-btn.confirm { background: rgba(255,255,255,0.15); color: rgba(255,255,255,0.45); }
+    .fsc-btn.confirm.ready { background: var(--amber); color: var(--navy); font-weight: 700; }
+
+    #xcanvas { display: none; }
+  </style>
+</head>
+<body>
+
+<div id="hdr">
+  <div class="logo"><svg viewBox="0 0 24 24" fill="none"><path d="M3 20 L12 4 L21 20" stroke="#0e2f5c" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+  <div><div class="hdr-t">Greek Parser</div><div class="hdr-s">Koine Morphological Analysis</div></div>
+</div>
+
+<div id="pg">
+  <div class="card">
+    <div class="card-hd"><div class="card-n">1</div><div class="card-t">Select Input Method</div></div>
+    <div class="card-b">
+      <div class="methods">
+        <div class="mbtn" id="btn-cam" onclick="doCamera()">
+          <svg viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+          <span>Camera</span>
+        </div>
+        <div class="mbtn" id="btn-upl" onclick="doUpload()">
+          <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          <span>Upload</span>
+        </div>
+        <div class="mbtn" id="btn-txt" onclick="doText()">
+          <svg viewBox="0 0 24 24"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
+          <span>Type</span>
+        </div>
+        <div class="mbtn" id="btn-verse" onclick="doVerse()">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+          <span>Verse</span>
+        </div>
+      </div>
+      <input type="file" id="f-cam" accept="image/*" capture="environment" />
+      <input type="file" id="f-upl" accept="image/*" />
+
+      <div id="img-stage">
+        <div id="thumb-wrap" onclick="openCrop()">
+          <img id="thumb" src="" alt="" />
+          <div id="thumb-dim"><span>✂ Tap to select region</span></div>
+        </div>
+        <div class="img-footer">
+          <button id="recrop-btn" onclick="openCrop()">Re-crop</button>
+          <button id="remove-btn" onclick="clearAll()">Remove image</button>
+        </div>
+      </div>
+
+      <div id="txt-stage">
+        <textarea id="greek-input" rows="3" placeholder="Paste or type Greek… e.g. ἐν ἀρχῇ ἦν ὁ λόγος" spellcheck="false"></textarea>
+      </div>
+
+      <div id="verse-stage">
+        <div class="verse-input-row">
+          <input type="text" id="verse-ref" placeholder="e.g. John 3:16 or 1 Cor 13:4-7"
+            autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+          <button id="verse-lookup-btn" onclick="doVerseLookup()">Look up</button>
+        </div>
+        <div id="verse-err"></div>
+        <div id="verse-result">
+          <div id="verse-result-ref"></div>
+          <div id="verse-result-text"></div>
+        </div>
+      </div>
+
+      <!-- Identify passage button — shown when image is loaded -->
+      <button id="identify-btn" onclick="doIdentifyPassage()">
+        🔍 Identify passage &amp; look up Greek text
+      </button>
+      <div id="err"></div>
+    </div>
+  </div>
+
+  <div id="loading"><div class="spin"></div><div class="ltxt">Analyzing Greek morphology…</div></div>
+
+  <div id="results">
+    <div class="card" id="trans-card">
+      <div class="card-hd" style="background:#fdf5e4; border-bottom:1px solid #e0d8c8;">
+        <div class="card-n" style="background:#b08000;">2</div>
+        <div class="card-t" style="color:#b08000;">Translation</div>
+        <span id="rcnt" style="margin-left:auto; font-size:13px; color:var(--ink-mid);"></span>
+      </div>
+      <div class="card-b">
+        <div style="font-family:'Lora',serif; font-size:1.2rem; color:var(--navy); font-style:italic; margin-bottom:0.6rem; line-height:1.5;" id="rtxt"></div>
+        <div style="height:1px; background:var(--border); margin-bottom:0.6rem;"></div>
+        <div style="font-family:'Lora',serif; font-size:1.2rem; color:var(--ink); line-height:1.6; margin-bottom:0.5rem;" id="rtrans"></div>
+        <div style="font-size:13px; color:var(--ink-mid); line-height:1.6; font-style:italic;" id="rnote"></div>
+      </div>
+    </div>
+    <div class="wcards" id="wcards"></div>
+  </div>
+</div>
+
+<div id="bbar">
+  <button id="parse-btn" onclick="doAnalyze()">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0e2f5c" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+    Analyze Morphology
+  </button>
+</div>
+
+<!-- Fullscreen crop overlay -->
+<div id="fsc">
+  <div id="fsc-top">
+    <div class="fsc-title">Select Region</div>
+    <div class="fsc-hint">Drag to select · Pinch to zoom<br>Tap outside box to clear</div>
+  </div>
+  <div id="fsc-zone">
+    <canvas id="fsc-cv"></canvas>
+  </div>
+  <div id="fsc-bot">
+    <button class="fsc-btn cancel" id="cancel-btn">Cancel</button>
+    <button class="fsc-btn clr"    id="clr-btn" onclick="clearSel()">Clear</button>
+    <button class="fsc-btn confirm" id="conf-btn">Use Full Image</button>
+  </div>
+</div>
+<canvas id="xcanvas"></canvas>
+
+<script>
+
+// ── App state ─────────────────────────────
+let srcFile = null, croppedDataUrl = null, hasCrop = false;
+const srcImage = new Image();
+
+// ── Input methods ─────────────────────────
+function setActive(id) {
+  ['btn-cam','btn-upl','btn-txt'].forEach(b => document.getElementById(b).classList.remove('active'));
+  if (id) document.getElementById(id).classList.add('active');
+}
+function doCamera() { setActive('btn-cam'); document.getElementById('txt-stage').style.display='none'; document.getElementById('f-cam').click(); }
+function doUpload() { setActive('btn-upl'); document.getElementById('txt-stage').style.display='none'; document.getElementById('f-upl').click(); }
+function doText() {
+  setActive('btn-txt');
+  document.getElementById('img-stage').style.display = 'none';
+  document.getElementById('verse-stage').style.display = 'none';
+  document.getElementById('identify-btn').style.display = 'none';
+  document.getElementById('txt-stage').style.display = 'block';
+  srcFile = null; croppedDataUrl = null; hasCrop = false;
+}
+
+function doVerse() {
+  setActive('btn-verse');
+  document.getElementById('img-stage').style.display = 'none';
+  document.getElementById('txt-stage').style.display = 'none';
+  document.getElementById('identify-btn').style.display = 'none';
+  document.getElementById('verse-stage').style.display = 'block';
+  srcFile = null; croppedDataUrl = null; hasCrop = false;
+}
+
+// ── Verse lookup ─────────────────────────────────────────
+async function doVerseLookup() {
+  const ref = document.getElementById('verse-ref').value.trim();
+  if (!ref) return;
+  const btn = document.getElementById('verse-lookup-btn');
+  const errEl = document.getElementById('verse-err');
+  const resultEl = document.getElementById('verse-result');
+  btn.disabled = true; btn.textContent = '…';
+  errEl.style.display = 'none';
+  resultEl.style.display = 'none';
+  try {
+    const res  = await fetch('/.netlify/functions/lookup-verse', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ reference: ref })
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) {
+      errEl.textContent = data.error || 'Could not find that verse.';
+      errEl.style.display = 'block';
+      return;
+    }
+    // Populate result box
+    document.getElementById('verse-result-ref').textContent  = data.reference;
+    document.getElementById('verse-result-text').textContent = data.text;
+    resultEl.style.display = 'block';
+    // Store text so Analyze can use it
+    window._verseText = data.text;
+    window._verseRef  = data.reference;
+  } catch(e) {
+    errEl.textContent = 'Network error: ' + e.message;
+    errEl.style.display = 'block';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Look up';
+  }
+}
+
+// Allow Enter key in verse input
+document.getElementById('verse-ref').addEventListener('keydown', e => {
+  if (e.key === 'Enter') doVerseLookup();
+});
+
+// ── Photo → Passage identification ────────────────────────
+async function doIdentifyPassage() {
+  if (!srcFile) return;
+  const btn = document.getElementById('identify-btn');
+  btn.disabled = true; btn.textContent = '🔍 Identifying passage…';
+  hideErr();
+  try {
+    const dataUrl = croppedDataUrl || await toDataUrl(srcFile);
+    const [,mime,b64] = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+
+    // Ask Claude to identify the book/chapter/verse from the image
+    const res = await fetch('/.netlify/functions/identify-passage', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ imageBase64: b64, mediaType: mime })
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) { showErr(data.error || 'Could not identify passage.'); return; }
+    if (!data.reference) { showErr('No passage reference found in image. Try a tighter crop on the verse numbers.'); return; }
+
+    // Switch to verse mode and auto-lookup
+    doVerse();
+    document.getElementById('verse-ref').value = data.reference;
+    await doVerseLookup();
+
+  } catch(e) { showErr('Error: ' + e.message); }
+  finally { btn.disabled = false; btn.textContent = '🔍 Identify passage & look up Greek text'; }
+}
+document.getElementById('f-cam').addEventListener('change', e => { if (e.target.files[0]) loadFile(e.target.files[0]); });
+document.getElementById('f-upl').addEventListener('change', e => { if (e.target.files[0]) loadFile(e.target.files[0]); });
+
+function loadFile(file) {
+  srcFile = file; croppedDataUrl = null; hasCrop = false;
+  const url = URL.createObjectURL(file);
+  srcImage.onload = () => openCrop();
+  srcImage.src = url;
+  document.getElementById('thumb').src = url;
+  document.getElementById('thumb-wrap').classList.remove('cropped');
+  document.getElementById('thumb-dim').style.display = 'flex';
+  document.getElementById('img-stage').style.display = 'block';
+  // Show identify button whenever an image is loaded
+  document.getElementById('identify-btn').style.display = 'block';
+}
+function clearAll() {
+  srcFile = null; croppedDataUrl = null; hasCrop = false;
+  document.getElementById('img-stage').style.display = 'none';
+  document.getElementById('identify-btn').style.display = 'none';
+  document.getElementById('thumb').src = '';
+  document.getElementById('f-cam').value = '';
+  document.getElementById('f-upl').value = '';
+  setActive(null);
+}
+
+// ══════════════════════════════════════════
+//  CROP ENGINE
+// ══════════════════════════════════════════
+const fscEl   = document.getElementById('fsc');
+const fscZone = document.getElementById('fsc-zone');
+const cv      = document.getElementById('fsc-cv');
+const ctx     = cv.getContext('2d');
+const confBtn = document.getElementById('conf-btn');
+const clrBtn  = document.getElementById('clr-btn');
+const cancelBtn = document.getElementById('cancel-btn');
+
+// Wire bottom-bar buttons with touchend so they work even though
+// the canvas zone calls preventDefault on its own touch events.
+function wireTap(el, fn) {
+  el.addEventListener('touchend', e => { e.preventDefault(); e.stopPropagation(); fn(); }, {passive: false});
+  el.addEventListener('click', fn);
+}
+wireTap(confBtn,   confirmCrop);
+wireTap(clrBtn,    clearSel);
+wireTap(cancelBtn, closeCrop);
+
+// Viewport
+let vx = 0, vy = 0, vs = 1;
+// Selection in image coords
+let sel = null;
+// Single-finger interaction
+let action    = null;  // 'draw'|'tl'|'tr'|'bl'|'br'|null
+let drawP0    = null;
+let resP0     = null;
+let selSnap   = null;
+
+// ─ All active touches keyed by identifier ─
+// We manage everything here so pinch can never race with a draw gesture
+let activeTouches = {}; // id -> {sx,sy}
+
+function openCrop() {
+  fscEl.classList.add('open');
+  sel = null; action = null; activeTouches = {};
+  requestAnimationFrame(() => {
+    const dpr = window.devicePixelRatio || 1;
+    const zw  = fscZone.offsetWidth;
+    const zh  = fscZone.offsetHeight;
+    cv.width  = zw * dpr;
+    cv.height = zh * dpr;
+    cv.style.width  = zw + 'px';
+    cv.style.height = zh + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    fitImage();
+    draw();
+    updateBtn();
+  });
+}
+function closeCrop() { fscEl.classList.remove('open'); }
+
+let minScale = 0.1;
+
+function fitImage() {
+  const iw = srcImage.naturalWidth, ih = srcImage.naturalHeight;
+  // Use CSS pixel dimensions (cv.width is physical pixels, divide by DPR)
+  const dpr = window.devicePixelRatio || 1;
+  const zw  = cv.width  / dpr;
+  const zh  = cv.height / dpr;
+  vs = Math.min(zw / iw, zh / ih) * 0.96;
+  minScale = vs * 0.85;   // can zoom out just past the fitted view
+  vx = (zw - iw * vs) / 2;
+  vy = (zh - ih * vs) / 2;
+}
+
+// ── Coords ────────────────────────────────
+function s2i(sx, sy) { return { ix: (sx - vx) / vs, iy: (sy - vy) / vs }; }
+function i2s(ix, iy) { return { sx: ix * vs + vx,   sy: iy * vs + vy   }; }
+function cl(v,lo,hi) { return Math.max(lo, Math.min(hi, v)); }
+
+function zonePos(clientX, clientY) {
+  const r = fscZone.getBoundingClientRect();
+  return { sx: clientX - r.left, sy: clientY - r.top };
+}
+
+// ── Draw ──────────────────────────────────
+function draw() {
+  const dpr = window.devicePixelRatio || 1;
+  const W = cv.width / dpr, H = cv.height / dpr;
+  ctx.clearRect(0, 0, W, H);
+  ctx.drawImage(srcImage, 0, 0, srcImage.naturalWidth, srcImage.naturalHeight,
+                vx, vy, srcImage.naturalWidth * vs, srcImage.naturalHeight * vs);
+  if (!sel || sel.w < 1 || sel.h < 1) return;
+
+  const tl = i2s(sel.x,         sel.y);
+  const br = i2s(sel.x + sel.w, sel.y + sel.h);
+  const sw = br.sx - tl.sx, sh = br.sy - tl.sy;
+
+  // dim
+  ctx.fillStyle = 'rgba(0,0,0,0.52)';
+  ctx.fillRect(0,     0,      W,        tl.sy);
+  ctx.fillRect(0,     br.sy,  W,        H - br.sy);
+  ctx.fillRect(0,     tl.sy,  tl.sx,    sh);
+  ctx.fillRect(br.sx, tl.sy,  W-br.sx,  sh);
+
+  // border
+  ctx.strokeStyle = 'rgba(255,255,255,0.95)';
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(tl.sx+0.75, tl.sy+0.75, sw-1.5, sh-1.5);
+
+  // L-brackets
+  const L = 16;
+  ctx.strokeStyle = 'white'; ctx.lineWidth = 2.5; ctx.lineCap = 'square';
+  [[tl.sx,tl.sy,1,1],[br.sx,tl.sy,-1,1],[tl.sx,br.sy,1,-1],[br.sx,br.sy,-1,-1]]
+    .forEach(([cx,cy,dx,dy]) => {
+      ctx.beginPath();
+      ctx.moveTo(cx+dx*L, cy); ctx.lineTo(cx, cy); ctx.lineTo(cx, cy+dy*L);
+      ctx.stroke();
+    });
+}
+
+// ── Hit test ──────────────────────────────
+const HIT = 30;
+function hitTest(sx, sy) {
+  if (!sel) return 'draw';
+  const tl = i2s(sel.x, sel.y);
+  const br = i2s(sel.x+sel.w, sel.y+sel.h);
+  if (Math.abs(sx-tl.sx)<HIT && Math.abs(sy-tl.sy)<HIT) return 'tl';
+  if (Math.abs(sx-br.sx)<HIT && Math.abs(sy-tl.sy)<HIT) return 'tr';
+  if (Math.abs(sx-tl.sx)<HIT && Math.abs(sy-br.sy)<HIT) return 'bl';
+  if (Math.abs(sx-br.sx)<HIT && Math.abs(sy-br.sy)<HIT) return 'br';
+  if (sx>tl.sx && sx<br.sx && sy>tl.sy && sy<br.sy) return 'inside';
+  return 'outside';
+}
+
+// ══════════════════════════════════════════
+//  UNIFIED TOUCH HANDLER
+//  All touch logic in one place — no racing
+// ══════════════════════════════════════════
+
+fscZone.addEventListener('touchstart', onTS, {passive:false});
+fscZone.addEventListener('touchmove',  onTM, {passive:false});
+fscZone.addEventListener('touchend',   onTE, {passive:false});
+fscZone.addEventListener('touchcancel',onTE, {passive:false});
+
+// Mouse fallback for desktop testing
+fscZone.addEventListener('mousedown', e => {
+  const {sx,sy} = zonePos(e.clientX, e.clientY);
+  singleStart(sx, sy);
+});
+document.addEventListener('mousemove', e => {
+  if (!action) return;
+  const r = fscZone.getBoundingClientRect();
+  singleMove(e.clientX - r.left, e.clientY - r.top);
+});
+document.addEventListener('mouseup', () => { action=null; updateBtn(); });
+
+function onTS(e) {
+  e.preventDefault();
+  // Register all new touches
+  for (const t of e.changedTouches) {
+    const p = zonePos(t.clientX, t.clientY);
+    activeTouches[t.identifier] = p;
+  }
+  const ids = Object.keys(activeTouches);
+  if (ids.length >= 2) {
+    // Two+ fingers — cancel any draw and switch to pinch/pan mode
+    action = null;
+  } else if (ids.length === 1) {
+    const {sx, sy} = activeTouches[ids[0]];
+    singleStart(sx, sy);
+  }
+}
+
+function onTM(e) {
+  e.preventDefault();
+  // Update positions
+  for (const t of e.changedTouches) {
+    if (activeTouches[t.identifier] !== undefined) {
+      activeTouches[t.identifier] = zonePos(t.clientX, t.clientY);
+    }
+  }
+  const ids = Object.keys(activeTouches);
+  if (ids.length >= 2) {
+    // Pinch-zoom + pan with two fingers
+    twoFingerGesture(ids);
+  } else if (ids.length === 1 && action) {
+    const {sx, sy} = activeTouches[ids[0]];
+    singleMove(sx, sy);
+  }
+}
+
+function onTE(e) {
+  e.preventDefault();
+  for (const t of e.changedTouches) {
+    delete activeTouches[t.identifier];
+  }
+  const ids = Object.keys(activeTouches);
+  if (ids.length === 0) {
+    // All fingers lifted — full reset so next touch starts clean
+    activeTouches = {};
+    prevTwoFinger = null;
+    action = null;
+    updateBtn();
+  } else if (ids.length === 1) {
+    // One finger remains after pinch — reset so it doesn't
+    // inherit stale two-finger state
+    prevTwoFinger = null;
+    action = null;
+  }
+}
+
+// Stores the PREVIOUS two-finger state for per-frame delta
+let prevTwoFinger = null;
+
+function twoFingerGesture(ids) {
+  const p0 = activeTouches[ids[0]];
+  const p1 = activeTouches[ids[1]];
+  const cx  = (p0.sx + p1.sx) / 2;
+  const cy  = (p0.sy + p1.sy) / 2;
+  const dx  = p0.sx - p1.sx, dy = p0.sy - p1.sy;
+  const d   = Math.sqrt(dx*dx + dy*dy);
+
+  if (!prevTwoFinger) {
+    prevTwoFinger = { cx, cy, d };
+    return;
+  }
+
+  // Scale — ratio of this frame's distance to last frame's distance
+  const scaleRatio = d / prevTwoFinger.d;
+  // Image point under midpoint before applying scale
+  const imgX = (cx - vx) / vs;
+  const imgY = (cy - vy) / vs;
+  vs = cl(vs * scaleRatio, minScale, 12);
+  // Reanchor so midpoint stays fixed
+  vx = cx - imgX * vs;
+  vy = cy - imgY * vs;
+
+  // Pan — translate by how much midpoint moved
+  vx += cx - prevTwoFinger.cx;
+  vy += cy - prevTwoFinger.cy;
+
+  prevTwoFinger = { cx, cy, d };
+  draw();
+}
+
+// Reset prevTwoFinger when fingers lift
+fscZone.addEventListener('touchend',    () => { prevTwoFinger = null; }, {passive:true});
+fscZone.addEventListener('touchcancel', () => { prevTwoFinger = null; }, {passive:true});
+
+// ── Single-finger selection ───────────────
+function singleStart(sx, sy) {
+  const hit = hitTest(sx, sy);
+  if (hit === 'outside') { clearSel(); return; }
+  if (hit === 'draw' || hit === 'inside') {
+    action = 'draw'; drawP0 = s2i(sx, sy);
+    sel = { x: drawP0.ix, y: drawP0.iy, w: 0, h: 0 };
+  } else {
+    action = hit; resP0 = s2i(sx, sy); selSnap = {...sel};
+  }
+}
+
+function singleMove(sx, sy) {
+  if (!action) return;
+  const iw = srcImage.naturalWidth, ih = srcImage.naturalHeight;
+  const ic = s2i(sx, sy);
+  if (action === 'draw') {
+    sel = {
+      x: cl(Math.min(drawP0.ix, ic.ix), 0, iw),
+      y: cl(Math.min(drawP0.iy, ic.iy), 0, ih),
+      w: cl(Math.abs(ic.ix - drawP0.ix), 0, iw),
+      h: cl(Math.abs(ic.iy - drawP0.iy), 0, ih),
+    };
+  } else {
+    let {x,y,w,h} = selSnap;
+    const ddx = ic.ix - resP0.ix, ddy = ic.iy - resP0.iy;
+    if      (action==='br'){w+=ddx;h+=ddy;}
+    else if (action==='bl'){x+=ddx;w-=ddx;h+=ddy;}
+    else if (action==='tr'){w+=ddx;y+=ddy;h-=ddy;}
+    else if (action==='tl'){x+=ddx;w-=ddx;y+=ddy;h-=ddy;}
+    x=cl(x,0,iw); y=cl(y,0,ih);
+    w=cl(w,8/vs,iw-x); h=cl(h,8/vs,ih-y);
+    sel={x,y,w,h};
+  }
+  draw(); updateBtn();
+}
+
+// ── Button state ──────────────────────────
+function updateBtn() {
+  const has = sel && sel.w > 4 && sel.h > 4;
+  confBtn.textContent = has ? 'Use Selection' : 'Use Full Image';
+  confBtn.classList.toggle('ready', !!has);
+  clrBtn.style.display = has ? 'inline-block' : 'none';
+}
+function clearSel() { sel=null; action=null; draw(); updateBtn(); }
+
+// ── Confirm ───────────────────────────────
+function confirmCrop() {
+  if (sel && sel.w > 4 && sel.h > 4) {
+    const xc = document.getElementById('xcanvas');
+    const cw = Math.round(sel.w), ch = Math.round(sel.h);
+    xc.width = cw; xc.height = ch;
+    xc.getContext('2d').drawImage(srcImage,
+      Math.round(sel.x), Math.round(sel.y), cw, ch, 0, 0, cw, ch);
+    croppedDataUrl = xc.toDataURL('image/jpeg', 0.93);
+    hasCrop = true;
+    document.getElementById('thumb').src = croppedDataUrl;
+    document.getElementById('thumb-wrap').classList.add('cropped');
+    document.getElementById('thumb-dim').style.display = 'none';
+  } else {
+    croppedDataUrl = null; hasCrop = false;
+    document.getElementById('thumb-wrap').classList.remove('cropped');
+    document.getElementById('thumb-dim').style.display = 'flex';
+  }
+  closeCrop();
+}
+
+// ── Analyze ───────────────────────────────
+async function doAnalyze() {
+  hideErr();
+  const text = document.getElementById('greek-input').value.trim();
+  const verseActive = document.getElementById('verse-stage').style.display !== 'none';
+  if (!srcFile && !text && !(verseActive && window._verseText)) { showErr('Take a photo, upload an image, look up a verse, or type Greek text.'); return; }
+  const btn = document.getElementById('parse-btn');
+  btn.disabled = true;
+  document.getElementById('results').style.display = 'none';
+  document.getElementById('loading').style.display = 'block';
+  document.getElementById('pg').scrollTop = 0;
+  try {
+    let body = {};
+    if (window._verseText && document.getElementById('verse-stage').style.display !== 'none') {
+      // Verse mode — use clean digital text, no image needed
+      body = { manualText: window._verseText };
+    } else if (srcFile) {
+      const dataUrl = croppedDataUrl || await toDataUrl(srcFile);
+      const [,mime,b64] = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+      body = { imageBase64: b64, mediaType: mime };
+    } else {
+      body = { manualText: text };
+    }
+    const res  = await fetch('/.netlify/functions/parse-greek', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const data = await res.json();
+    if (!res.ok||data.error) { showErr(data.error||'An error occurred.'); return; }
+    if (!data.words?.length) { showErr('No Greek words found. Try a tighter crop or type the text.'); return; }
+    renderResults(data.words, data.translation);
+  } catch(e) { showErr('Network error: '+e.message); }
+  finally { btn.disabled=false; document.getElementById('loading').style.display='none'; }
+}
+
+function toDataUrl(file) {
+  return new Promise((res,rej) => { const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=rej; r.readAsDataURL(file); });
+}
+
+// ── Render ────────────────────────────────
+const isNA = v => !v || ['n/a','na',''].includes(String(v).toLowerCase().trim());
+function renderResults(words, translation) {
+  const c = document.getElementById('wcards');
+  c.innerHTML = '';
+  document.getElementById('rcnt').textContent = `${words.length} word${words.length!==1?'s':''}`;
+  document.getElementById('rtxt').textContent  = words.map(w=>w.word).join(' ');
+  document.getElementById('rtrans').textContent = translation && translation.english ? '"' + translation.english + '"' : '';
+  document.getElementById('rnote').textContent  = translation && translation.note    ? translation.note : '';
+  // hide note line if empty
+  document.getElementById('rnote').style.display = (translation && translation.note) ? 'block' : 'none';
+  words.forEach((w,i) => {
+    const el = document.createElement('div');
+    el.className = 'wcard'; el.style.animationDelay = `${i*0.06}s`;
+    const fields = [['Person',w.person],['Number',w.number],['Gender',w.gender],['Case',w.case],['Tense',w.tense],['Voice',w.voice],['Mood',w.mood]];
+    el.innerHTML = `
+      <div class="wc-hd">
+        <span class="wc-gr">${w.word||''}</span>
+        <span class="wc-lx">${w.lexical_form||''}</span>
+        <span class="wc-pos">${w.part_of_speech||''}</span>
+      </div>
+      <div class="wc-bd">
+        <div class="mgrid">
+          ${fields.map(([k,v])=>`<div><span class="mkey">${k}</span><span class="mval${isNA(v)?' na':''}">${isNA(v)?'—':v}</span></div>`).join('')}
+        </div>
+        <div class="mrow">
+          <div><span class="mmeank">Inflected meaning</span><span class="mmeanv-i">${w.inflected_meaning||'—'}</span></div>
+          <div><span class="mmeank">Lexical form</span><span class="mmeanv-gr">${w.lexical_form||'—'}</span><span class="mmeanv-l">${w.lexical_meaning||'—'}</span></div>
+        </div>
+        ${w.notes?`<div class="nbar">📝 ${w.notes}</div>`:''}
+      </div>`;
+    c.appendChild(el);
+  });
+  document.getElementById('results').style.display = 'block';
+  setTimeout(()=>{ document.getElementById('pg').scrollTop = document.getElementById('pg').scrollHeight; },100);
+}
+
+function showErr(m) { const e=document.getElementById('err'); e.textContent=m; e.style.display='block'; }
+function hideErr()  { document.getElementById('err').style.display='none'; }
+
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  });
+}
+</script>
+</body>
+</html>
