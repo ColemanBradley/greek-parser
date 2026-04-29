@@ -99,12 +99,27 @@ async function writeParsedWords(words) {
   if (res.error) throw new Error(`Read error: ${JSON.stringify(res.error)}`);
 
   const today    = new Date().toISOString().split('T')[0];
-  const newRows  = [];  // words to batch-append
-  const updates  = [];  // {range, values} for existing words
+  const newRows  = [];  // words to batch-append (not yet in sheet)
+  const updates  = [];  // {range, values} for words already in sheet
+  // Track indices into newRows by lexical form so same-parse dupes update newRows not append again
+  const newRowIdx = {}; // normLex -> index in newRows
 
   for (const word of words) {
     if (!word.lexical_form) continue;
     const normLex = word.lexical_form.normalize('NFC');
+
+    // Check if already queued in newRows (same parse, not yet written to sheet)
+    if (newRowIdx[normLex] !== undefined) {
+      const idx = newRowIdx[normLex];
+      const existing = newRows[idx];
+      const forms = new Set((existing[3] || '').split('|').filter(Boolean));
+      if (word.word) forms.add(word.word);
+      newRows[idx][3] = Array.from(forms).join('|');
+      newRows[idx][6] = String(parseInt(existing[6] || '0') + 1);
+      continue;
+    }
+
+    // Check if already in sheet
     const rowIdx = rows.slice(1).findIndex(r => r[0].normalize('NFC') === normLex);
 
     if (rowIdx >= 0) {
@@ -125,6 +140,7 @@ async function writeParsedWords(words) {
       updates.push({ range: `${sheetName}!A${sheetRow}:G${sheetRow}`, values: [updated] });
       rows[rowIdx + 1] = updated;
     } else {
+      // Brand new word — add to newRows and track its index
       const newRow = [
         normLex              || '',
         word.lexical_meaning || '',
@@ -134,8 +150,8 @@ async function writeParsedWords(words) {
         today,
         '1',
       ];
+      newRowIdx[normLex] = newRows.length;
       newRows.push(newRow);
-      rows.push(newRow); // so duplicates in same parse are caught
     }
   }
 
