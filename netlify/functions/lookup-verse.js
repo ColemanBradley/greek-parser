@@ -1,15 +1,7 @@
-// Verse lookup using api.esv.org for English reference confirmation
-// and scripture.api.bible for Greek text (SBLGNT)
-// Falls back to bible-api.com if primary fails
-
-const BOOK_NAMES = {
-  40:'Matthew',41:'Mark',42:'Luke',43:'John',44:'Acts',
-  45:'Romans',46:'1 Corinthians',47:'2 Corinthians',48:'Galatians',
-  49:'Ephesians',50:'Philippians',51:'Colossians',52:'1 Thessalonians',
-  53:'2 Thessalonians',54:'1 Timothy',55:'2 Timothy',56:'Titus',
-  57:'Philemon',58:'Hebrews',59:'James',60:'1 Peter',61:'2 Peter',
-  62:'1 John',63:'2 John',64:'3 John',65:'Jude',66:'Revelation'
-};
+// Verse lookup — serves directly from bundled sblgnt.json
+// No external API calls. Reads the static file from the public folder.
+const fs   = require('fs');
+const path = require('path');
 
 const BOOK_MAP = {
   'matthew':40,'matt':40,'mat':40,'mt':40,
@@ -41,8 +33,23 @@ const BOOK_MAP = {
   'revelation':66,'rev':66,'rv':66,'re':66,
 };
 
+// Load SBLGNT once at cold start
+let sblgnt = null;
+function getSBLGNT() {
+  if (sblgnt) return sblgnt;
+  // Netlify functions can read from the publish directory via __dirname relative path
+  // The public folder is deployed alongside functions
+  // sblgnt.json lives right next to this function file
+  const p = path.join(__dirname, 'sblgnt.json');
+  if (fs.existsSync(p)) {
+    sblgnt = JSON.parse(fs.readFileSync(p, 'utf-8'));
+    return sblgnt;
+  }
+  return null;
+}
+
 function parseReference(ref) {
-  let s = ref.trim().toLowerCase();
+  const s = ref.trim().toLowerCase();
   const m = s.match(/^((?:\d\s*)?[a-z]+(?:\s+[a-z]+)*)\s+(\d+):(\d+)(?:\s*[-\u2013]\s*(\d+))?$/);
   if (!m) return null;
   const [, bookRaw, chap, vs, ve] = m;
@@ -55,49 +62,6 @@ function parseReference(ref) {
     verseStart: parseInt(vs),
     verseEnd:   ve ? parseInt(ve) : parseInt(vs),
   };
-}
-
-const stripHtml = s => s.replace(/<[^>]+>/g, '').replace(/&[a-z#0-9]+;/gi, ' ').replace(/\s+/g, ' ').trim();
-
-async function tryBolls(bookNum, chapter, verseStart, verseEnd) {
-  // Try both SBLGNT and THGNT
-  for (const tr of ['SBLGNT', 'THGNT']) {
-    try {
-      const res = await fetch(
-        `https://bolls.life/get-text/${tr}/${bookNum}/${chapter}/`,
-        { headers: { 'Accept': 'application/json' }, signal: AbortSignal.timeout(5000) }
-      );
-      if (!res.ok) continue;
-      const data = await res.json();
-      if (!Array.isArray(data) || !data.length) continue;
-      const selected = data.filter(v => v.verse >= verseStart && v.verse <= verseEnd);
-      if (!selected.length) continue;
-      return { text: selected.map(v => stripHtml(v.text)).join(' '), source: tr };
-    } catch(e) { continue; }
-  }
-  return null;
-}
-
-async function tryGetBible(bookNum, chapter, verseStart, verseEnd) {
-  // getbible.net — returns SBLGNT for NT
-  // Book abbreviations for getbible
-  const abbr = BOOK_NAMES[bookNum]?.toLowerCase().replace(/\s+/g,'').replace(/\d/g, n => n) || '';
-  try {
-    const res = await fetch(
-      `https://getbible.net/v2/sblgnt/${bookNum}/${chapter}.json`,
-      { signal: AbortSignal.timeout(5000) }
-    );
-    if (!res.ok) return null;
-    const data = await res.json();
-    // data.verses is an object keyed by verse number
-    const verses = data.verses || {};
-    const parts = [];
-    for (let v = verseStart; v <= verseEnd; v++) {
-      if (verses[v]) parts.push(stripHtml(verses[v].verse));
-    }
-    if (!parts.length) return null;
-    return { text: parts.join(' '), source: 'SBLGNT (getbible)' };
-  } catch(e) { return null; }
 }
 
 exports.handler = async function(event) {
@@ -118,21 +82,30 @@ exports.handler = async function(event) {
     };
   }
 
-  const { bookNum, chapter, verseStart, verseEnd } = parsed;
-
-  // Try bolls.life first, then getbible.net
-  let result = await tryBolls(bookNum, chapter, verseStart, verseEnd);
-  if (!result) result = await tryGetBible(bookNum, chapter, verseStart, verseEnd);
-
-  if (!result) {
+  const db = getSBLGNT();
+  if (!db) {
     return {
-      statusCode: 502,
-      body: JSON.stringify({ error: `Could not retrieve Greek text for ${reference}. Both lookup sources failed — check your connection and try again.` })
+      statusCode: 500,
+      body: JSON.stringify({ error: 'SBLGNT data not found on server. Please redeploy.' })
     };
   }
 
-  // Build clean display reference
-  const bookDisplay = BOOK_NAMES[bookNum] || reference.trim().replace(/\s*\d+:\d+.*$/, '').trim();
+  const { bookNum, chapter, verseStart, verseEnd } = parsed;
+  const parts = [];
+  for (let v = verseStart; v <= verseEnd; v++) {
+    const key = `${bookNum}:${chapter}:${v}`;
+    const text = db.verses[key];
+    if (text) parts.push(text);
+  }
+
+  if (!parts.length) {
+    return {
+      statusCode: 404,
+      body: JSON.stringify({ error: `${reference} not found in SBLGNT.` })
+    };
+  }
+
+  const bookDisplay = db.books[String(bookNum)] || reference.trim().replace(/\s*\d+:\d+.*$/, '').trim();
   const verseDisplay = verseStart === verseEnd
     ? `${chapter}:${verseStart}`
     : `${chapter}:${verseStart}–${verseEnd}`;
@@ -141,9 +114,9 @@ exports.handler = async function(event) {
     statusCode: 200,
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      text: result.text,
+      text:      parts.join(' '),
       reference: `${bookDisplay} ${verseDisplay}`,
-      source: result.source,
+      source:    'SBLGNT',
     }),
   };
 };
