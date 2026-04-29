@@ -7,7 +7,7 @@ function b64url(str) {
 
 exports.handler = async function(event) {
   const SHEET_ID = process.env.GOOGLE_SHEET_ID;
-  const SA_EMAIL = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+  const SA_EMAIL = process.env.GOOGLE_SERVICE_ACCT_EMAIL;
   const SA_KEY   = process.env.GOOGLE_PRIVATE_KEY;
 
   const log = [];

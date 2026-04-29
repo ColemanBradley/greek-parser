@@ -85,7 +85,7 @@ async function ensureHeaders(token, sheetId, sheetName) {
 
 async function writeParsedWords(words) {
   const SHEET_ID = process.env.GOOGLE_SHEET_ID;
-  const SA_EMAIL = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+  const SA_EMAIL = process.env.GOOGLE_SERVICE_ACCT_EMAIL;
   const SA_KEY   = process.env.GOOGLE_PRIVATE_KEY;
   if (!SHEET_ID || !SA_EMAIL || !SA_KEY) return;
 
