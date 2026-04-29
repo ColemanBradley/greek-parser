@@ -65,9 +65,13 @@ const COLUMNS = ['Lexical Form','Gloss','Part of Speech','Inflected Forms Seen',
 
 async function ensureHeaders(token, sheetId, sheetName) {
   const res = await sheetsGet(token, sheetId, `${sheetName}!A1:G1`);
+  if (res.error) {
+    throw new Error(`Sheet tab error: ${JSON.stringify(res.error)} — make sure a tab named "${sheetName}" exists in your Google Sheet`);
+  }
   const row = res.values?.[0];
   if (!row || row[0] !== 'Lexical Form') {
-    await sheetsUpdate(token, sheetId, `${sheetName}!A1:G1`, [COLUMNS]);
+    const upd = await sheetsUpdate(token, sheetId, `${sheetName}!A1:G1`, [COLUMNS]);
+    if (upd.error) throw new Error(`Header write error: ${JSON.stringify(upd.error)}`);
   }
 }
 
@@ -120,7 +124,9 @@ async function writeParsedWords(words) {
         today,
         '1',
       ];
-      await sheetsAppend(token, SHEET_ID, `${sheetName}!A:G`, [newRow]);
+      const appendRes = await sheetsAppend(token, SHEET_ID, `${sheetName}!A:G`, [newRow]);
+      if (appendRes.error) throw new Error(`Append error: ${JSON.stringify(appendRes.error)}`);
+      console.log(`Appended: ${word.lexical_form}`);
       rows.push(newRow);
     }
   }
@@ -170,7 +176,7 @@ Rules: Use N/A for inapplicable categories. Include diacritics on lexical forms.
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
-        max_tokens: 4000,
+        max_tokens: 8000,
         system: systemPrompt,
         messages: [{ role: 'user', content: userContent }]
       })
