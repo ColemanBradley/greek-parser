@@ -836,7 +836,7 @@ async function doGreekAnalyze() {
     const data = await res.json();
     if (!res.ok||data.error) { showErr(data.error||'An error occurred.'); return; }
     if (!data.words?.length) { showErr('No Greek words found. Try a tighter crop or type the text.'); return; }
-    renderResults(data.words, data.translation, data.fromCache || 0, data.fromClaude !== undefined ? data.fromClaude : data.words.length);
+    renderGreekResults(data.words, data.translation, data.fromCache || 0, data.fromClaude !== undefined ? data.fromClaude : data.words.length);
   } catch(e) { showErr('Network error: '+e.message); }
   finally { btn.disabled=false; document.getElementById('loading').style.display='none'; }
 }
@@ -847,7 +847,7 @@ function toDataUrl(file) {
 
 // ── Render ────────────────────────────────
 const isNA = v => !v || ['n/a','na',''].includes(String(v).toLowerCase().trim());
-function renderResults(words, translation, fromCache, fromClaude) {
+function renderGreekResults(words, translation, fromCache, fromClaude) {
   const c = document.getElementById('wcards');
   c.innerHTML = '';
   document.getElementById('rcnt').textContent = `${words.length} word${words.length!==1?'s':''}`;
@@ -975,17 +975,16 @@ const HEBREW_FIELDS = [
   ['Definiteness','definiteness'],
 ];
 
-// Override renderResults to handle Hebrew cards
-const _origRenderResults = renderResults;
-function renderResults(words, translation) {
+// Single dispatcher for results rendering
+function renderResults(words, translation, fromCache, fromClaude) {
   if (currentLang === 'hebrew') {
-    renderHebrewResults(words, translation);
+    renderHebrewResults(words, translation, fromCache, fromClaude);
   } else {
-    _origRenderResults(words, translation);
+    renderGreekResults(words, translation, fromCache, fromClaude);
   }
 }
 
-function renderHebrewResults(words, translation) {
+function renderHebrewResults(words, translation, fromCache, fromClaude) {
   const c = document.getElementById('wcards');
   c.innerHTML = '';
   document.getElementById('rcnt').textContent   = `${words.length} word${words.length!==1?'s':''}`;
@@ -994,6 +993,16 @@ function renderHebrewResults(words, translation) {
   const noteEl = document.getElementById('rnote');
   noteEl.textContent  = translation?.note || '';
   noteEl.style.display = translation?.note ? 'block' : 'none';
+  const cacheEl2 = document.getElementById('cache-indicator');
+  if (fromCache > 0 && fromClaude > 0) {
+    cacheEl2.textContent = fromCache + ' cached · ' + fromClaude + ' new';
+    cacheEl2.style.display = 'inline';
+  } else if (fromCache > 0 && fromClaude === 0) {
+    cacheEl2.textContent = fromCache + ' from cache';
+    cacheEl2.style.display = 'inline';
+  } else {
+    cacheEl2.style.display = 'none';
+  }
 
   words.forEach((w, i) => {
     const el = document.createElement('div');
