@@ -83,19 +83,19 @@
 
     #txt-stage { display: none; }
     #verse-stage { display: none; }
-    .verse-input-row { display: flex; gap: 0.5rem; }
+    .verse-input-row { display: flex; gap: 0.5rem; width: 100%; }
     #verse-ref {
-      flex: 1; border: 1.5px solid var(--border); border-radius: 8px;
+      flex: 1; min-width: 0; border: 1.5px solid var(--border); border-radius: 8px;
       padding: 0.75rem 0.875rem; font-family: 'Source Sans 3', sans-serif;
       font-size: 1rem; color: var(--ink); background: var(--white);
     }
     #verse-ref:focus { outline: none; border-color: var(--navy); }
     #verse-ref::placeholder { color: var(--ink-lite); }
     #verse-lookup-btn {
-      padding: 0 1.1rem; background: var(--navy); color: white;
+      flex-shrink: 0; padding: 0 1rem; background: var(--navy); color: white;
       border: none; border-radius: 8px; font-size: 0.8125rem; font-weight: 600;
       cursor: pointer; white-space: nowrap; -webkit-tap-highlight-color: transparent;
-      letter-spacing: 0.04em;
+      letter-spacing: 0.04em; height: 48px;
     }
     #verse-lookup-btn:active { background: var(--navy-mid); }
     #verse-lookup-btn:disabled { opacity: 0.45; }
