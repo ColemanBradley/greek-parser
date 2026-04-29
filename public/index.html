@@ -6,7 +6,7 @@
   <title>Greek Parser</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;1,400&family=Source+Sans+3:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;1,400&family=Source+Sans+3:wght@400;500;600&family=Frank+Ruhl+Libre:wght@400;500;700&display=swap" rel="stylesheet" />
   <link rel="manifest" href="/manifest.json" />
   <meta name="theme-color" content="#0e2f5c" />
   <meta name="mobile-web-app-capable" content="yes" />
@@ -37,6 +37,11 @@
       --green-bdr: #a8d8cc;
       --gold:      #b08000;
       --red:       #c0392b;
+      /* Hebrew mode */
+      --burg:      #7a1f3a;
+      --burg-mid:  #9e2d4f;
+      --burg-pale: #fdf0f3;
+      --burg-bdr:  #e8c4ce;
     }
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { height: 100%; overflow: hidden; }
@@ -176,13 +181,84 @@
     .fsc-btn.confirm.ready { background: var(--amber); color: var(--navy); font-weight: 700; }
 
     #xcanvas { display: none; }
+
+    /* ══════════════════════════════════════
+       HEBREW MODE STYLES
+    ══════════════════════════════════════ */
+    body.hebrew-mode { }
+
+    /* Header in Hebrew mode */
+    body.hebrew-mode #hdr { background: var(--burg); }
+
+    /* Lang toggle */
+    #lang-toggle { margin-left: auto; display: flex; background: rgba(255,255,255,0.12); border-radius: 20px; padding: 2px; gap: 0; }
+    .ltog { font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 18px; border: none; background: transparent; color: rgba(255,255,255,0.6); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+    .ltog.active { background: var(--amber); color: var(--navy); }
+    body.hebrew-mode .ltog.active { background: white; color: var(--burg); }
+
+    /* Card headers in Hebrew mode */
+    body.hebrew-mode .card-hd { background: var(--burg-pale); border-bottom-color: var(--burg-bdr); }
+    body.hebrew-mode .card-n  { background: var(--burg); }
+    body.hebrew-mode .card-t  { color: var(--burg); }
+
+    /* Method buttons in Hebrew mode */
+    body.hebrew-mode .mbtn.active { border-color: var(--burg); background: var(--burg-pale); }
+    body.hebrew-mode .mbtn.active svg  { stroke: var(--burg); }
+    body.hebrew-mode .mbtn.active span { color: var(--burg); }
+    body.hebrew-mode #btn-verse { opacity: 0.32; pointer-events: none; }
+
+    /* Parse button in Hebrew mode */
+    body.hebrew-mode #parse-btn { background: var(--burg); color: white; }
+    body.hebrew-mode #parse-btn:active { background: var(--burg-mid); }
+    body.hebrew-mode #parse-btn svg { stroke: white; }
+
+    /* Hebrew text input */
+    #heb-input {
+      width: 100%; border: 1.5px solid var(--border); border-radius: 8px;
+      padding: 0.75rem 0.875rem;
+      font-family: 'Frank Ruhl Libre', 'David', Georgia, serif;
+      font-size: 1.4rem; line-height: 1.6; color: var(--ink);
+      background: var(--white); resize: none; min-height: 80px;
+      direction: rtl; text-align: right;
+    }
+    #heb-input:focus { outline: none; border-color: var(--burg); }
+    #heb-input::placeholder { color: var(--ink-lite); font-size: 1.1rem; }
+    #heb-stage { display: none; }
+
+    /* Translation card in Hebrew mode */
+    body.hebrew-mode .trans-hd { background: var(--burg-pale) !important; border-bottom-color: var(--burg-bdr) !important; }
+    body.hebrew-mode .trans-n  { background: var(--burg) !important; }
+    body.hebrew-mode .trans-t  { color: var(--burg) !important; }
+    body.hebrew-mode .trans-cnt { color: var(--burg) !important; }
+    body.hebrew-mode #rtxt { direction: rtl; text-align: right; color: var(--burg); }
+    body.hebrew-mode #rtrans { direction: ltr; }
+
+    /* Hebrew word cards */
+    .wcard.heb .wc-hd { background: var(--burg-pale); border-bottom-color: var(--burg-bdr); flex-direction: row-reverse; }
+    .wcard.heb .wc-gr  { color: var(--burg); font-family: 'Frank Ruhl Libre','David',Georgia,serif; font-size: 2rem; direction: rtl; }
+    .wcard.heb .wc-lx  { color: var(--burg-mid); direction: rtl; }
+    .wcard.heb .wc-pos { background: var(--burg); margin-left: 0; margin-right: auto; }
+    .wcard.heb .mmeanv-i  { color: var(--burg); }
+    .wcard.heb .mmeanv-gr { color: var(--burg); font-family: 'Frank Ruhl Libre','David',Georgia,serif; direction: rtl; }
+
+    /* Spinner in Hebrew mode */
+    body.hebrew-mode .spin { border-top-color: var(--burg); }
+
+    /* Verse button disabled text */
+    #verse-disabled-note { display: none; font-size: 11px; color: var(--ink-lite); font-style: italic; margin-top: 6px; text-align: center; }
+    body.hebrew-mode #verse-disabled-note { display: block; }
+
   </style>
 </head>
 <body>
 
 <div id="hdr">
   <div class="logo"><img src="/icons/icon-192.png" alt="Λ" style="width:100%;height:100%;border-radius:8px;display:block;" /></div>
-  <div><div class="hdr-t">Greek Parser</div><div class="hdr-s">Koine Morphological Analysis</div></div>
+  <div><div class="hdr-t" id="hdr-title">Greek Parser</div><div class="hdr-s" id="hdr-sub">Koine Morphological Analysis</div></div>
+  <div id="lang-toggle">
+    <button class="ltog active" id="tog-gk" onclick="setLang('greek')">GK</button>
+    <button class="ltog"        id="tog-hb" onclick="setLang('hebrew')">HB</button>
+  </div>
 </div>
 
 <div id="pg">
@@ -238,6 +314,15 @@
         </div>
       </div>
 
+      <!-- Hebrew input stage -->
+      <div id="heb-stage">
+        <textarea id="heb-input" rows="3"
+          placeholder="הקלד או הדבק עברית… e.g. בְּרֵאשִׁית בָּרָא אֱלֹהִים"
+          spellcheck="false"></textarea>
+      </div>
+
+      <div id="verse-disabled-note">Verse lookup coming soon for Hebrew</div>
+
       <!-- Identify passage button — shown when image is loaded -->
       <button id="identify-btn" onclick="doIdentifyPassage()">
         🔍 Identify passage &amp; look up Greek text
@@ -246,7 +331,7 @@
     </div>
   </div>
 
-  <div id="loading"><div class="spin"></div><div class="ltxt">Analyzing Greek morphology…</div></div>
+  <div id="loading"><div class="spin"></div><div class="ltxt" id="loading-txt">Analyzing Greek morphology…</div></div>
 
   <div id="results">
     <div class="card" id="trans-card">
@@ -807,6 +892,186 @@ if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js').catch(() => {});
   });
 }
+
+// ══════════════════════════════════════════
+//  LANGUAGE MODE
+// ══════════════════════════════════════════
+let currentLang = 'greek';
+
+function setLang(lang) {
+  currentLang = lang;
+  const isHeb = lang === 'hebrew';
+
+  // Toggle body class
+  document.body.classList.toggle('hebrew-mode', isHeb);
+
+  // Toggle button states
+  document.getElementById('tog-gk').classList.toggle('active', !isHeb);
+  document.getElementById('tog-hb').classList.toggle('active', isHeb);
+
+  // Header text
+  document.getElementById('hdr-title').textContent = isHeb ? 'Hebrew Parser' : 'Greek Parser';
+  document.getElementById('hdr-sub').textContent   = isHeb ? 'Biblical Hebrew Analysis' : 'Koine Morphological Analysis';
+
+  // Loading text
+  document.getElementById('loading-txt').textContent = isHeb
+    ? 'Analyzing Hebrew morphology…'
+    : 'Analyzing Greek morphology…';
+
+  // Hide all input stages
+  document.getElementById('img-stage').style.display  = 'none';
+  document.getElementById('txt-stage').style.display  = 'none';
+  document.getElementById('verse-stage').style.display = 'none';
+  document.getElementById('heb-stage').style.display  = 'none';
+
+  // Reset method buttons
+  ['btn-cam','btn-upl','btn-txt','btn-verse'].forEach(b =>
+    document.getElementById(b).classList.remove('active')
+  );
+
+  // Reset results
+  document.getElementById('results').style.display = 'none';
+  document.getElementById('err').style.display     = 'none';
+
+  // Clear image state
+  srcFile = null; croppedDataUrl = null; hasCrop = false;
+  document.getElementById('f-cam').value = '';
+  document.getElementById('f-upl').value = '';
+}
+
+// Override doText to show Hebrew input when in Hebrew mode
+const _origDoText = doText;
+function doText() {
+  if (currentLang === 'hebrew') {
+    setActive('btn-txt');
+    document.getElementById('img-stage').style.display  = 'none';
+    document.getElementById('txt-stage').style.display  = 'none';
+    document.getElementById('verse-stage').style.display = 'none';
+    document.getElementById('heb-stage').style.display  = 'block';
+    srcFile = null; croppedDataUrl = null; hasCrop = false;
+  } else {
+    _origDoText();
+  }
+}
+
+// Hebrew morphological fields
+const HEBREW_FIELDS = [
+  ['Root',        'root'],
+  ['Binyan',      'binyan'],
+  ['Stem',        'stem'],
+  ['Person',      'person'],
+  ['Number',      'number'],
+  ['Gender',      'gender'],
+  ['State',       'state'],
+  ['Definiteness','definiteness'],
+];
+
+// Override renderResults to handle Hebrew cards
+const _origRenderResults = renderResults;
+function renderResults(words, translation) {
+  if (currentLang === 'hebrew') {
+    renderHebrewResults(words, translation);
+  } else {
+    _origRenderResults(words, translation);
+  }
+}
+
+function renderHebrewResults(words, translation) {
+  const c = document.getElementById('wcards');
+  c.innerHTML = '';
+  document.getElementById('rcnt').textContent   = `${words.length} word${words.length!==1?'s':''}`;
+  document.getElementById('rtxt').textContent   = words.map(w => w.word).join(' ');
+  document.getElementById('rtrans').textContent = translation?.english ? `"${translation.english}"` : '';
+  const noteEl = document.getElementById('rnote');
+  noteEl.textContent  = translation?.note || '';
+  noteEl.style.display = translation?.note ? 'block' : 'none';
+
+  words.forEach((w, i) => {
+    const el = document.createElement('div');
+    el.className = 'wcard heb';
+    el.style.animationDelay = `${i * 0.06}s`;
+
+    const fields = HEBREW_FIELDS.map(([k, key]) => {
+      const v = w[key];
+      const na = isNA(v);
+      return `<div><span class="mkey">${k}</span><span class="mval${na?' na':''}">${na?'—':v}</span></div>`;
+    }).join('');
+
+    el.innerHTML = `
+      <div class="wc-hd heb">
+        <span class="wc-gr">${w.word||''}</span>
+        <span class="wc-lx">${w.lexical_form||''}</span>
+        <span class="wc-pos">${w.part_of_speech||''}</span>
+      </div>
+      <div class="wc-bd">
+        <div class="mgrid">${fields}</div>
+        <div class="mrow">
+          <div><span class="mmeank">Inflected meaning</span><span class="mmeanv-i">${w.inflected_meaning||'—'}</span></div>
+          <div><span class="mmeank">Lexical form</span><span class="mmeanv-gr">${w.lexical_form||'—'}</span><span class="mmeanv-l">${w.lexical_meaning||'—'}</span></div>
+        </div>
+        ${w.notes?`<div class="nbar">📝 ${w.notes}</div>`:''}
+      </div>`;
+    c.appendChild(el);
+  });
+
+  document.getElementById('results').style.display = 'block';
+  setTimeout(() => {
+    document.getElementById('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, 100);
+}
+
+// Override doAnalyze to handle Hebrew text input and correct language param
+const _origDoAnalyze = doAnalyze;
+async function doAnalyze() {
+  if (currentLang === 'hebrew') {
+    await doHebrewAnalyze();
+  } else {
+    await _origDoAnalyze();
+  }
+}
+
+async function doHebrewAnalyze() {
+  hideErr();
+  const text = document.getElementById('heb-input').value.trim();
+  if (!srcFile && !text) { showErr('Take a photo, upload an image, or type Hebrew text.'); return; }
+
+  const btn = document.getElementById('parse-btn');
+  btn.disabled = true;
+  document.getElementById('results').style.display = 'none';
+  document.getElementById('loading').style.display = 'block';
+  document.getElementById('pg').scrollTop = 0;
+
+  try {
+    let body = {};
+    if (srcFile) {
+      const dataUrl = croppedDataUrl || await toDataUrl(srcFile);
+      const [,mime,b64] = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+      body = { imageBase64: b64, mediaType: mime, language: 'hebrew' };
+    } else {
+      body = { manualText: text, language: 'hebrew' };
+    }
+
+    const res  = await fetch('/.netlify/functions/parse-hebrew', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) { showErr(data.error || 'An error occurred.'); return; }
+    if (!data.words?.length)   { showErr('No Hebrew words found. Try a tighter crop or type the text.'); return; }
+    renderResults(data.words, data.translation);
+  } catch(e) { showErr('Network error: ' + e.message); }
+  finally {
+    btn.disabled = false;
+    document.getElementById('loading').style.display = 'none';
+  }
+}
+
+// Ctrl+Enter in Hebrew textarea
+document.getElementById('heb-input').addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') doAnalyze();
+});
+
 </script>
 </body>
 </html>
