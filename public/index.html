@@ -794,7 +794,7 @@ function renderResults(words, translation) {
     c.appendChild(el);
   });
   document.getElementById('results').style.display = 'block';
-  setTimeout(()=>{ document.getElementById('pg').scrollTop = document.getElementById('pg').scrollHeight; },100);
+  setTimeout(()=>{ document.getElementById('results').scrollIntoView({ behavior: 'smooth', block: 'start' }); },100);
 }
 
 function showErr(m) { const e=document.getElementById('err'); e.textContent=m; e.style.display='block'; }
