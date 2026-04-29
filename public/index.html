@@ -338,7 +338,7 @@
       <div class="card-hd" style="background:#fdf5e4; border-bottom:1px solid #e0d8c8;">
         <div class="card-n" style="background:#b08000;">2</div>
         <div class="card-t" style="color:#b08000;">Translation</div>
-        <span id="rcnt" style="margin-left:auto; font-size:13px; color:var(--ink-mid);"></span>
+        <span id="rcnt" style="margin-left:auto; font-size:13px; color:var(--ink-mid);"></span><span id="cache-indicator" style="font-size:11px; color:var(--green); font-weight:600; margin-left:8px; display:none;"></span>
       </div>
       <div class="card-b">
         <div style="font-family:'Lora',serif; font-size:1.2rem; color:var(--navy); font-style:italic; margin-bottom:0.6rem; line-height:1.5;" id="rtxt"></div>
@@ -388,7 +388,7 @@ function setActive(id) {
 }
 function doCamera() { setActive('btn-cam'); document.getElementById('txt-stage').style.display='none'; document.getElementById('f-cam').click(); }
 function doUpload() { setActive('btn-upl'); document.getElementById('txt-stage').style.display='none'; document.getElementById('f-upl').click(); }
-function doText() {
+function doGreekText() {
   setActive('btn-txt');
   document.getElementById('img-stage').style.display = 'none';
   document.getElementById('verse-stage').style.display = 'none';
@@ -810,7 +810,7 @@ function confirmCrop() {
 }
 
 // ── Analyze ───────────────────────────────
-async function doAnalyze() {
+async function doGreekAnalyze() {
   hideErr();
   const text = document.getElementById('greek-input').value.trim();
   const verseActive = document.getElementById('verse-stage').style.display !== 'none';
@@ -836,7 +836,7 @@ async function doAnalyze() {
     const data = await res.json();
     if (!res.ok||data.error) { showErr(data.error||'An error occurred.'); return; }
     if (!data.words?.length) { showErr('No Greek words found. Try a tighter crop or type the text.'); return; }
-    renderResults(data.words, data.translation);
+    renderResults(data.words, data.translation, data.fromCache || 0, data.fromClaude !== undefined ? data.fromClaude : data.words.length);
   } catch(e) { showErr('Network error: '+e.message); }
   finally { btn.disabled=false; document.getElementById('loading').style.display='none'; }
 }
@@ -847,7 +847,7 @@ function toDataUrl(file) {
 
 // ── Render ────────────────────────────────
 const isNA = v => !v || ['n/a','na',''].includes(String(v).toLowerCase().trim());
-function renderResults(words, translation) {
+function renderResults(words, translation, fromCache, fromClaude) {
   const c = document.getElementById('wcards');
   c.innerHTML = '';
   document.getElementById('rcnt').textContent = `${words.length} word${words.length!==1?'s':''}`;
@@ -856,6 +856,16 @@ function renderResults(words, translation) {
   document.getElementById('rnote').textContent  = translation && translation.note    ? translation.note : '';
   // hide note line if empty
   document.getElementById('rnote').style.display = (translation && translation.note) ? 'block' : 'none';
+  const cacheEl = document.getElementById('cache-indicator');
+  if (fromCache > 0 && fromClaude > 0) {
+    cacheEl.textContent = fromCache + ' cached · ' + fromClaude + ' new';
+    cacheEl.style.display = 'inline';
+  } else if (fromCache > 0 && fromClaude === 0) {
+    cacheEl.textContent = fromCache + ' from cache';
+    cacheEl.style.display = 'inline';
+  } else {
+    cacheEl.style.display = 'none';
+  }
   words.forEach((w,i) => {
     const el = document.createElement('div');
     el.className = 'wcard'; el.style.animationDelay = `${i*0.06}s`;
@@ -940,17 +950,16 @@ function setLang(lang) {
 }
 
 // Override doText to show Hebrew input when in Hebrew mode
-const _origDoText = doText;
 function doText() {
   if (currentLang === 'hebrew') {
     setActive('btn-txt');
-    document.getElementById('img-stage').style.display  = 'none';
-    document.getElementById('txt-stage').style.display  = 'none';
+    document.getElementById('img-stage').style.display   = 'none';
+    document.getElementById('txt-stage').style.display   = 'none';
     document.getElementById('verse-stage').style.display = 'none';
-    document.getElementById('heb-stage').style.display  = 'block';
+    document.getElementById('heb-stage').style.display   = 'block';
     srcFile = null; croppedDataUrl = null; hasCrop = false;
   } else {
-    _origDoText();
+    doGreekText();
   }
 }
 
@@ -1020,13 +1029,12 @@ function renderHebrewResults(words, translation) {
   }, 100);
 }
 
-// Override doAnalyze to handle Hebrew text input and correct language param
-const _origDoAnalyze = doAnalyze;
+// Single dispatcher — routes to correct language handler
 async function doAnalyze() {
   if (currentLang === 'hebrew') {
     await doHebrewAnalyze();
   } else {
-    await _origDoAnalyze();
+    await doGreekAnalyze();
   }
 }
 
@@ -1059,7 +1067,7 @@ async function doHebrewAnalyze() {
     const data = await res.json();
     if (!res.ok || data.error) { showErr(data.error || 'An error occurred.'); return; }
     if (!data.words?.length)   { showErr('No Hebrew words found. Try a tighter crop or type the text.'); return; }
-    renderResults(data.words, data.translation);
+    renderResults(data.words, data.translation, data.fromCache || 0, data.fromClaude !== undefined ? data.fromClaude : data.words.length);
   } catch(e) { showErr('Network error: ' + e.message); }
   finally {
     btn.disabled = false;

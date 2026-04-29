@@ -59,15 +59,61 @@ async function sheetsAppend(token, sheetId, range, values) {
   return res.json();
 }
 
-const COLUMNS = ['Lexical Form','Gloss','Part of Speech','Inflected Forms Seen','Language'];
+const COLUMNS = ['Lexical Form','Gloss','Part of Speech','Inflected Forms Seen','Language','Parse JSON'];
 
 async function ensureHeaders(token, sheetId, sheetName) {
-  const res = await sheetsGet(token, sheetId, `${sheetName}!A1:E1`);
+  const res = await sheetsGet(token, sheetId, `${sheetName}!A1:F1`);
   if (res.error) throw new Error(`Sheet tab error: ${JSON.stringify(res.error)}`);
   const row = res.values?.[0];
   if (!row || row[0] !== 'Lexical Form') {
-    const upd = await sheetsUpdate(token, sheetId, `${sheetName}!A1:E1`, [COLUMNS]);
+    const upd = await sheetsUpdate(token, sheetId, `${sheetName}!A1:F1`, [COLUMNS]);
     if (upd.error) throw new Error(`Header write error: ${JSON.stringify(upd.error)}`);
+  }
+}
+
+
+// ── Check sheet cache for a list of inflected forms ──────────
+// Returns { cached: [{wordData, inflectedForm}], uncached: [inflectedForm] }
+async function checkCache(inflectedForms, language) {
+  const SHEET_ID = process.env.GOOGLE_SHEET_ID;
+  const SA_EMAIL = process.env.GOOGLE_SERVICE_ACCT_EMAIL;
+  const SA_KEY   = process.env.GOOGLE_PRIVATE_KEY;
+  if (!SHEET_ID || !SA_EMAIL || !SA_KEY) return { cached: [], uncached: inflectedForms };
+
+  try {
+    const token     = await getAccessToken(SA_EMAIL, SA_KEY);
+    const sheetName = language === 'hebrew' ? 'Hebrew' : 'Greek';
+    const res       = await sheetsGet(token, SHEET_ID, `${sheetName}!A:F`);
+    const rows      = res.values || [];
+    if (res.error || rows.length < 2) return { cached: [], uncached: inflectedForms };
+
+    const cached   = [];
+    const uncached = [];
+
+    for (const form of inflectedForms) {
+      const normForm = form.normalize('NFC');
+      // Search each row's inflected forms (col D) for this exact form
+      const match = rows.slice(1).find(r => {
+        const forms = (r[3] || '').split('|').filter(Boolean);
+        return forms.some(f => f.normalize('NFC') === normForm);
+      });
+
+      if (match && match[5]) {
+        // Found with JSON data
+        try {
+          const wordData = JSON.parse(match[5]);
+          // Override word field with the actual inflected form being searched
+          wordData.word = form;
+          cached.push({ wordData, inflectedForm: form });
+        } catch(e) { uncached.push(form); }
+      } else {
+        uncached.push(form);
+      }
+    }
+    return { cached, uncached };
+  } catch(e) {
+    console.error('Cache check error:', e.message);
+    return { cached: [], uncached: inflectedForms };
   }
 }
 
@@ -81,7 +127,7 @@ async function writeParsedWords(words, language) {
   const sheetName = language === 'hebrew' ? 'Hebrew' : 'Greek';
   await ensureHeaders(token, SHEET_ID, sheetName);
 
-  const res  = await sheetsGet(token, SHEET_ID, `${sheetName}!A:E`);
+  const res  = await sheetsGet(token, SHEET_ID, `${sheetName}!A:F`);
   const rows = res.values || [];
   if (res.error) throw new Error(`Read error: ${JSON.stringify(res.error)}`);
 
@@ -115,8 +161,9 @@ async function writeParsedWords(words, language) {
         existing[2] || word.part_of_speech  || '',
         Array.from(forms).join('|'),
         existing[4] || language || 'greek',
+        existing[5] || JSON.stringify(word),
       ];
-      updates.push({ range: `${sheetName}!A${sheetRow}:E${sheetRow}`, values: [updated] });
+      updates.push({ range: `${sheetName}!A${sheetRow}:F${sheetRow}`, values: [updated] });
       rows[rowIdx + 1] = updated;
     } else {
       // Brand new word
@@ -126,6 +173,7 @@ async function writeParsedWords(words, language) {
         word.part_of_speech  || '',
         word.word            || '',
         language             || 'greek',
+        JSON.stringify(word),
       ];
       newRowIdx[normLex] = newRows.length;
       newRows.push(newRow);
@@ -144,7 +192,7 @@ async function writeParsedWords(words, language) {
   }
 
   if (newRows.length > 0) {
-    const appendRes = await sheetsAppend(token, SHEET_ID, `${sheetName}!A:E`, newRows);
+    const appendRes = await sheetsAppend(token, SHEET_ID, `${sheetName}!A:F`, newRows);
     if (appendRes.error) throw new Error(`Append error: ${JSON.stringify(appendRes.error)}`);
   }
 
@@ -164,12 +212,57 @@ exports.handler = async function(event) {
 
   const { imageBase64, mediaType, manualText, language } = body;
 
+  // ── Cache-first: if text input, extract words and check sheet ──
+  // For image input we can't pre-check (we don't know the words yet)
+  // For text input, split on whitespace and check each word first
+  let cachedWords = [];
+  let wordsToParseFromClaude = null; // null = parse everything, array = parse only these
+
+  if (manualText && !imageBase64) {
+    const lang = language || 'greek';
+    // Split text into individual words (handles spaces, punctuation)
+    const rawWords = manualText.trim().split(/[\s··,;.·]+/).filter(Boolean);
+    if (rawWords.length > 0) {
+      try {
+        const { cached, uncached } = await checkCache(rawWords, lang);
+        cachedWords = cached.map(c => c.wordData);
+        if (uncached.length === 0) {
+          // Everything is cached — return immediately, no Claude call
+          console.log(`Full cache hit: ${cachedWords.length} words`);
+          return {
+            statusCode: 200,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              words: cachedWords,
+              translation: null,
+              fromCache: cachedWords.length,
+              fromClaude: 0
+            })
+          };
+        }
+        // Partial cache hit — only ask Claude about uncached words
+        if (cached.length > 0) {
+          wordsToParseFromClaude = uncached;
+          console.log(`Partial cache: ${cached.length} cached, ${uncached.length} need Claude`);
+        }
+      } catch(e) {
+        console.error('Pre-check error:', e.message);
+        // Fall through to full Claude parse
+      }
+    }
+  }
+
+  // Build the text Claude needs to parse
+  const textForClaude = wordsToParseFromClaude
+    ? wordsToParseFromClaude.join(' ')
+    : manualText;
+
   let userContent = [];
   if (imageBase64 && mediaType) {
     userContent.push({ type: 'image', source: { type: 'base64', media_type: mediaType, data: imageBase64 } });
     userContent.push({ type: 'text', text: 'Please analyze the Koine Greek text visible in this image.' });
-  } else if (manualText) {
-    userContent.push({ type: 'text', text: `Please analyze this Koine Greek text: ${manualText}` });
+  } else if (textForClaude) {
+    userContent.push({ type: 'text', text: `Please analyze this Koine Greek text: ${textForClaude}` });
   } else {
     return { statusCode: 400, body: JSON.stringify({ error: 'No image or text provided' }) };
   }
@@ -224,10 +317,17 @@ Rules: Use N/A for inapplicable categories. Include diacritics on lexical forms.
       }
     }
 
+    // Merge cached words with Claude words, preserving original order
+    const allWords = [...cachedWords, ...words];
     return {
       statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ words, translation })
+      body: JSON.stringify({
+        words: allWords,
+        translation,
+        fromCache: cachedWords.length,
+        fromClaude: words.length
+      })
     };
 
   } catch(err) {

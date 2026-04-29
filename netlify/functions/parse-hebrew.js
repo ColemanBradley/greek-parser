@@ -43,7 +43,7 @@ async function sheetsAppend(token, sheetId, range, values) {
   return res.json();
 }
 
-const COLUMNS = ['Lexical Form','Gloss','Part of Speech','Inflected Forms Seen','Language'];
+const COLUMNS = ['Lexical Form','Gloss','Part of Speech','Inflected Forms Seen','Language','Parse JSON'];
 
 async function ensureHeaders(token, sheetId, sheetName) {
   const res = await sheetsGet(token, sheetId, `${sheetName}!A1:E1`);
@@ -52,6 +52,39 @@ async function ensureHeaders(token, sheetId, sheetName) {
   if (!row || row[0] !== 'Lexical Form') {
     const upd = await sheetsUpdate(token, sheetId, `${sheetName}!A1:E1`, [COLUMNS]);
     if (upd.error) throw new Error(`Header write error: ${JSON.stringify(upd.error)}`);
+  }
+}
+
+
+async function checkCache(inflectedForms) {
+  const SHEET_ID = process.env.GOOGLE_SHEET_ID;
+  const SA_EMAIL = process.env.GOOGLE_SERVICE_ACCT_EMAIL;
+  const SA_KEY   = process.env.GOOGLE_PRIVATE_KEY;
+  if (!SHEET_ID || !SA_EMAIL || !SA_KEY) return { cached: [], uncached: inflectedForms };
+  try {
+    const token = await getAccessToken(SA_EMAIL, SA_KEY);
+    const res   = await sheetsGet(token, SHEET_ID, 'Hebrew!A:F');
+    const rows  = res.values || [];
+    if (res.error || rows.length < 2) return { cached: [], uncached: inflectedForms };
+    const cached = [], uncached = [];
+    for (const form of inflectedForms) {
+      const normForm = form.normalize('NFC');
+      const match = rows.slice(1).find(r => {
+        const forms = (r[3]||'').split('|').filter(Boolean);
+        return forms.some(f => f.normalize('NFC') === normForm);
+      });
+      if (match && match[5]) {
+        try {
+          const wordData = JSON.parse(match[5]);
+          wordData.word = form;
+          cached.push({ wordData, inflectedForm: form });
+        } catch(e) { uncached.push(form); }
+      } else { uncached.push(form); }
+    }
+    return { cached, uncached };
+  } catch(e) {
+    console.error('Hebrew cache check error:', e.message);
+    return { cached: [], uncached: inflectedForms };
   }
 }
 
@@ -65,7 +98,7 @@ async function writeParsedWords(words) {
   const sheetName = 'Hebrew';
   await ensureHeaders(token, SHEET_ID, sheetName);
 
-  const res  = await sheetsGet(token, SHEET_ID, `${sheetName}!A:E`);
+  const res  = await sheetsGet(token, SHEET_ID, `${sheetName}!A:F`);
   const rows = res.values || [];
 
   const newRows = [], updates = [], newRowIdx = {};
@@ -87,11 +120,11 @@ async function writeParsedWords(words) {
       const existing = rows[rowIdx+1];
       const forms    = new Set((existing[3]||'').split('|').filter(Boolean));
       if (word.word) forms.add(word.word);
-      const updated  = [normLex, existing[1]||word.lexical_meaning||'', existing[2]||word.part_of_speech||'', Array.from(forms).join('|'), 'hebrew'];
-      updates.push({ range:`Hebrew!A${rowIdx+2}:E${rowIdx+2}`, values:[updated] });
+      const updated  = [normLex, existing[1]||word.lexical_meaning||'', existing[2]||word.part_of_speech||'', Array.from(forms).join('|'), 'hebrew', existing[5]||JSON.stringify(word)];
+      updates.push({ range:`Hebrew!A${rowIdx+2}:F${rowIdx+2}`, values:[updated] });
       rows[rowIdx+1] = updated;
     } else {
-      const newRow = [normLex, word.lexical_meaning||'', word.part_of_speech||'', word.word||'', 'hebrew'];
+      const newRow = [normLex, word.lexical_meaning||'', word.part_of_speech||'', word.word||'', 'hebrew', JSON.stringify(word)];
       newRowIdx[normLex] = newRows.length;
       newRows.push(newRow);
     }
@@ -106,7 +139,7 @@ async function writeParsedWords(words) {
     if (d.error) throw new Error(`Batch update error: ${JSON.stringify(d.error)}`);
   }
   if (newRows.length > 0) {
-    const appendRes = await sheetsAppend(token, SHEET_ID, 'Hebrew!A:E', newRows);
+    const appendRes = await sheetsAppend(token, SHEET_ID, 'Hebrew!A:F', newRows);
     if (appendRes.error) throw new Error(`Append error: ${JSON.stringify(appendRes.error)}`);
   }
   console.log(`Hebrew Sheets: ${newRows.length} new, ${updates.length} updated`);
@@ -125,12 +158,30 @@ exports.handler = async function(event) {
 
   const { imageBase64, mediaType, manualText } = body;
 
+  let cachedWords = [];
+  let textForClaude = manualText;
+
+  if (manualText && !imageBase64) {
+    const rawWords = manualText.trim().split(/[\s\u05c3\u05be,;.]+/).filter(Boolean);
+    if (rawWords.length > 0) {
+      try {
+        const { cached, uncached } = await checkCache(rawWords);
+        cachedWords = cached.map(c => c.wordData);
+        if (uncached.length === 0) {
+          return { statusCode:200, headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({ words:cachedWords, translation:null, fromCache:cachedWords.length, fromClaude:0 }) };
+        }
+        if (cached.length > 0) textForClaude = uncached.join(' ');
+      } catch(e) { console.error('Pre-check error:', e.message); }
+    }
+  }
+
   let userContent = [];
   if (imageBase64 && mediaType) {
     userContent.push({ type:'image', source:{ type:'base64', media_type:mediaType, data:imageBase64 } });
     userContent.push({ type:'text', text:'Please analyze the Biblical Hebrew text visible in this image.' });
-  } else if (manualText) {
-    userContent.push({ type:'text', text:`Please analyze this Biblical Hebrew text: ${manualText}` });
+  } else if (textForClaude) {
+    userContent.push({ type:'text', text:`Please analyze this Biblical Hebrew text: ${textForClaude}` });
   } else {
     return { statusCode:400, body:JSON.stringify({error:'No image or text provided'}) };
   }
@@ -170,7 +221,9 @@ Rules: Use N/A for inapplicable categories. Include niqqud on lexical forms when
       catch(err) { console.error('Hebrew Sheets error:', err.message); }
     }
 
-    return { statusCode:200, headers:{'Content-Type':'application/json'}, body:JSON.stringify({words,translation}) };
+    const allWords = [...cachedWords, ...words];
+    return { statusCode:200, headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ words:allWords, translation, fromCache:cachedWords.length, fromClaude:words.length }) };
 
   } catch(err) {
     return { statusCode:500, body:JSON.stringify({error:err.message}) };
