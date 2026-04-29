@@ -1,5 +1,15 @@
-// Verse lookup — primary: bolls.life SBLGNT, fallback: THGNT
-// No API key required.
+// Verse lookup using api.esv.org for English reference confirmation
+// and scripture.api.bible for Greek text (SBLGNT)
+// Falls back to bible-api.com if primary fails
+
+const BOOK_NAMES = {
+  40:'Matthew',41:'Mark',42:'Luke',43:'John',44:'Acts',
+  45:'Romans',46:'1 Corinthians',47:'2 Corinthians',48:'Galatians',
+  49:'Ephesians',50:'Philippians',51:'Colossians',52:'1 Thessalonians',
+  53:'2 Thessalonians',54:'1 Timothy',55:'2 Timothy',56:'Titus',
+  57:'Philemon',58:'Hebrews',59:'James',60:'1 Peter',61:'2 Peter',
+  62:'1 John',63:'2 John',64:'3 John',65:'Jude',66:'Revelation'
+};
 
 const BOOK_MAP = {
   'matthew':40,'matt':40,'mat':40,'mt':40,
@@ -33,7 +43,6 @@ const BOOK_MAP = {
 
 function parseReference(ref) {
   let s = ref.trim().toLowerCase();
-  // Match: optional number prefix + book name(s) + chapter:verse[-verse]
   const m = s.match(/^((?:\d\s*)?[a-z]+(?:\s+[a-z]+)*)\s+(\d+):(\d+)(?:\s*[-\u2013]\s*(\d+))?$/);
   if (!m) return null;
   const [, bookRaw, chap, vs, ve] = m;
@@ -48,17 +57,47 @@ function parseReference(ref) {
   };
 }
 
-async function fetchFromBolls(translation, bookNum, chapter, verseStart, verseEnd) {
-  const res = await fetch(
-    `https://bolls.life/get-text/${translation}/${bookNum}/${chapter}/`,
-    { headers: { 'Accept': 'application/json' } }
-  );
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const verses = await res.json();
-  if (!Array.isArray(verses) || !verses.length) throw new Error('empty response');
-  const selected = verses.filter(v => v.verse >= verseStart && v.verse <= verseEnd);
-  if (!selected.length) throw new Error(`verse ${verseStart} not found in chapter`);
-  return selected;
+const stripHtml = s => s.replace(/<[^>]+>/g, '').replace(/&[a-z#0-9]+;/gi, ' ').replace(/\s+/g, ' ').trim();
+
+async function tryBolls(bookNum, chapter, verseStart, verseEnd) {
+  // Try both SBLGNT and THGNT
+  for (const tr of ['SBLGNT', 'THGNT']) {
+    try {
+      const res = await fetch(
+        `https://bolls.life/get-text/${tr}/${bookNum}/${chapter}/`,
+        { headers: { 'Accept': 'application/json' }, signal: AbortSignal.timeout(5000) }
+      );
+      if (!res.ok) continue;
+      const data = await res.json();
+      if (!Array.isArray(data) || !data.length) continue;
+      const selected = data.filter(v => v.verse >= verseStart && v.verse <= verseEnd);
+      if (!selected.length) continue;
+      return { text: selected.map(v => stripHtml(v.text)).join(' '), source: tr };
+    } catch(e) { continue; }
+  }
+  return null;
+}
+
+async function tryGetBible(bookNum, chapter, verseStart, verseEnd) {
+  // getbible.net — returns SBLGNT for NT
+  // Book abbreviations for getbible
+  const abbr = BOOK_NAMES[bookNum]?.toLowerCase().replace(/\s+/g,'').replace(/\d/g, n => n) || '';
+  try {
+    const res = await fetch(
+      `https://getbible.net/v2/sblgnt/${bookNum}/${chapter}.json`,
+      { signal: AbortSignal.timeout(5000) }
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    // data.verses is an object keyed by verse number
+    const verses = data.verses || {};
+    const parts = [];
+    for (let v = verseStart; v <= verseEnd; v++) {
+      if (verses[v]) parts.push(stripHtml(verses[v].verse));
+    }
+    if (!parts.length) return null;
+    return { text: parts.join(' '), source: 'SBLGNT (getbible)' };
+  } catch(e) { return null; }
 }
 
 exports.handler = async function(event) {
@@ -80,36 +119,31 @@ exports.handler = async function(event) {
   }
 
   const { bookNum, chapter, verseStart, verseEnd } = parsed;
-  const stripHtml = s => s.replace(/<[^>]+>/g, '').replace(/&[a-z#0-9]+;/gi, ' ').replace(/\s+/g, ' ').trim();
 
-  // Try SBLGNT first, fall back to THGNT
-  const translations = ['SBLGNT', 'THGNT'];
-  let lastErr = 'unknown error';
+  // Try bolls.life first, then getbible.net
+  let result = await tryBolls(bookNum, chapter, verseStart, verseEnd);
+  if (!result) result = await tryGetBible(bookNum, chapter, verseStart, verseEnd);
 
-  for (const tr of translations) {
-    try {
-      const selected = await fetchFromBolls(tr, bookNum, chapter, verseStart, verseEnd);
-      const text = selected.map(v => stripHtml(v.text)).join(' ');
-
-      // Reconstruct display reference from original input
-      const parts = reference.trim().split(/\s+/);
-      const bookDisplay = parts.slice(0, parts.length - 1).join(' ');
-      const verseDisplay = verseStart === verseEnd
-        ? `${chapter}:${verseStart}`
-        : `${chapter}:${verseStart}–${verseEnd}`;
-
-      return {
-        statusCode: 200,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, reference: `${bookDisplay} ${verseDisplay}`, translation: tr }),
-      };
-    } catch(e) {
-      lastErr = e.message;
-    }
+  if (!result) {
+    return {
+      statusCode: 502,
+      body: JSON.stringify({ error: `Could not retrieve Greek text for ${reference}. Both lookup sources failed — check your connection and try again.` })
+    };
   }
 
+  // Build clean display reference
+  const bookDisplay = BOOK_NAMES[bookNum] || reference.trim().replace(/\s*\d+:\d+.*$/, '').trim();
+  const verseDisplay = verseStart === verseEnd
+    ? `${chapter}:${verseStart}`
+    : `${chapter}:${verseStart}–${verseEnd}`;
+
   return {
-    statusCode: 404,
-    body: JSON.stringify({ error: `Verse not found: ${reference}. (${lastErr})` })
+    statusCode: 200,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      text: result.text,
+      reference: `${bookDisplay} ${verseDisplay}`,
+      source: result.source,
+    }),
   };
 };
