@@ -31,14 +31,20 @@ async function getAccessToken(email, rawKey) {
     body: `grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=${jwt}`,
   });
   const data = await res.json();
-  if (!data.access_token) throw new Error(`Auth failed: ${JSON.stringify(data)}`);
+  if (!data.access_token) {
+    console.error('Auth failed:', JSON.stringify(data));
+    throw new Error(`Auth failed: ${JSON.stringify(data)}`);
+  }
+  console.log('Auth token obtained successfully');
   return data.access_token;
 }
 
 async function sheetsGet(token, sheetId, range) {
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(range)}`;
   const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-  return res.json();
+  const data = await res.json();
+  if (data.error) console.error('sheetsGet error:', JSON.stringify(data.error));
+  return data;
 }
 
 async function sheetsUpdate(token, sheetId, range, values) {
@@ -58,7 +64,9 @@ async function sheetsAppend(token, sheetId, range, values) {
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ values }),
   });
-  return res.json();
+  const data = await res.json();
+  console.log('sheetsAppend status:', res.status, JSON.stringify(data).slice(0, 300));
+  return data;
 }
 
 const COLUMNS = ['Lexical Form','Gloss','Part of Speech','Inflected Forms Seen','Language','Date Added','Parse Count'];
@@ -81,20 +89,24 @@ async function writeParsedWords(words) {
   const SA_KEY   = process.env.GOOGLE_PRIVATE_KEY;
   if (!SHEET_ID || !SA_EMAIL || !SA_KEY) return;
 
-  const token = await getAccessToken(SA_EMAIL, SA_KEY);
+  const token     = await getAccessToken(SA_EMAIL, SA_KEY);
   const sheetName = 'Greek';
   await ensureHeaders(token, SHEET_ID, sheetName);
 
   // Fetch all existing rows once
   const res  = await sheetsGet(token, SHEET_ID, `${sheetName}!A:G`);
   const rows = res.values || [];
+  if (res.error) throw new Error(`Read error: ${JSON.stringify(res.error)}`);
+
+  const today    = new Date().toISOString().split('T')[0];
+  const newRows  = [];  // words to batch-append
+  const updates  = [];  // {range, values} for existing words
 
   for (const word of words) {
     if (!word.lexical_form) continue;
     const rowIdx = rows.slice(1).findIndex(r => r[0] === word.lexical_form);
 
     if (rowIdx >= 0) {
-      // Update existing — add inflected form, increment count
       const existing = rows[rowIdx + 1];
       const forms    = new Set((existing[3] || '').split('|').filter(Boolean));
       if (word.word) forms.add(word.word);
@@ -106,29 +118,44 @@ async function writeParsedWords(words) {
         existing[2] || word.part_of_speech  || '',
         Array.from(forms).join('|'),
         existing[4] || 'greek',
-        existing[5] || new Date().toISOString().split('T')[0],
+        existing[5] || today,
         newCount,
       ];
-      await sheetsUpdate(token, SHEET_ID, `${sheetName}!A${sheetRow}:G${sheetRow}`, [updated]);
-      // Update local rows array so subsequent words in same parse see it
+      updates.push({ range: `${sheetName}!A${sheetRow}:G${sheetRow}`, values: [updated] });
       rows[rowIdx + 1] = updated;
     } else {
-      // Append new row
-      const today  = new Date().toISOString().split('T')[0];
       const newRow = [
-        word.lexical_form        || '',
-        word.lexical_meaning     || '',
-        word.part_of_speech      || '',
-        word.word                || '',
+        word.lexical_form    || '',
+        word.lexical_meaning || '',
+        word.part_of_speech  || '',
+        word.word            || '',
         'greek',
         today,
         '1',
       ];
-      const appendRes = await sheetsAppend(token, SHEET_ID, `${sheetName}!A:G`, [newRow]);
-      if (appendRes.error) throw new Error(`Append error: ${JSON.stringify(appendRes.error)}`);
-      console.log(`Appended: ${word.lexical_form}`);
-      rows.push(newRow);
+      newRows.push(newRow);
+      rows.push(newRow); // so duplicates in same parse are caught
     }
+  }
+
+  // Batch update existing rows in one API call
+  if (updates.length > 0) {
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values:batchUpdate`;
+    const res2 = await fetch(url, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ valueInputOption: 'USER_ENTERED', data: updates }),
+    });
+    const r2 = await res2.json();
+    if (r2.error) throw new Error(`Batch update error: ${JSON.stringify(r2.error)}`);
+    console.log(`Updated ${updates.length} existing rows`);
+  }
+
+  // Append all new rows in one API call
+  if (newRows.length > 0) {
+    const appendRes = await sheetsAppend(token, SHEET_ID, `${sheetName}!A:G`, newRows);
+    if (appendRes.error) throw new Error(`Append error: ${JSON.stringify(appendRes.error)}`);
+    console.log(`Appended ${newRows.length} new rows`);
   }
 }
 
