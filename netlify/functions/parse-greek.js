@@ -104,7 +104,8 @@ async function writeParsedWords(words) {
 
   for (const word of words) {
     if (!word.lexical_form) continue;
-    const rowIdx = rows.slice(1).findIndex(r => r[0] === word.lexical_form);
+    const normLex = word.lexical_form.normalize('NFC');
+    const rowIdx = rows.slice(1).findIndex(r => r[0].normalize('NFC') === normLex);
 
     if (rowIdx >= 0) {
       const existing = rows[rowIdx + 1];
@@ -113,7 +114,7 @@ async function writeParsedWords(words) {
       const newCount = (parseInt(existing[6] || '0') + 1).toString();
       const sheetRow = rowIdx + 2;
       const updated  = [
-        existing[0],
+        existing[0].normalize('NFC'),
         existing[1] || word.lexical_meaning || '',
         existing[2] || word.part_of_speech  || '',
         Array.from(forms).join('|'),
@@ -125,7 +126,7 @@ async function writeParsedWords(words) {
       rows[rowIdx + 1] = updated;
     } else {
       const newRow = [
-        word.lexical_form    || '',
+        normLex              || '',
         word.lexical_meaning || '',
         word.part_of_speech  || '',
         word.word            || '',
