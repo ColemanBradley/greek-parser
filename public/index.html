@@ -205,7 +205,7 @@
     body.hebrew-mode .mbtn.active { border-color: var(--burg); background: var(--burg-pale); }
     body.hebrew-mode .mbtn.active svg  { stroke: var(--burg); }
     body.hebrew-mode .mbtn.active span { color: var(--burg); }
-    body.hebrew-mode #btn-verse { opacity: 0.32; pointer-events: none; }
+    /* Hebrew verse button now enabled */
 
     /* Parse button in Hebrew mode */
     body.hebrew-mode #parse-btn { background: var(--burg); color: white; }
@@ -303,7 +303,7 @@
 
       <div id="verse-stage">
         <div class="verse-input-row">
-          <input type="text" id="verse-ref" placeholder="e.g. John 3:16 or 1 Cor 13:4-7"
+          <input type="text" id="verse-ref" placeholder="e.g. John 3:16 or Genesis 1:1"
             autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
           <button id="verse-lookup-btn" onclick="doVerseLookup()">Look up</button>
         </div>
@@ -321,11 +321,11 @@
           spellcheck="false"></textarea>
       </div>
 
-      <div id="verse-disabled-note">Verse lookup coming soon for Hebrew</div>
+      
 
       <!-- Identify passage button — shown when image is loaded -->
       <button id="identify-btn" onclick="doIdentifyPassage()">
-        🔍 Identify passage &amp; look up Greek text
+        🔍 <span id="identify-btn-text">Identify passage &amp; look up Greek text</span>
       </button>
       <div id="err"></div>
     </div>
@@ -417,7 +417,8 @@ async function doVerseLookup() {
   errEl.style.display = 'none';
   resultEl.style.display = 'none';
   try {
-    const res  = await fetch('/.netlify/functions/lookup-verse', {
+    const endpoint = currentLang === 'hebrew' ? '/.netlify/functions/lookup-hebrew' : '/.netlify/functions/lookup-verse';
+    const res  = await fetch(endpoint, {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ reference: ref })
     });
@@ -947,6 +948,14 @@ function setLang(lang) {
   srcFile = null; croppedDataUrl = null; hasCrop = false;
   document.getElementById('f-cam').value = '';
   document.getElementById('f-upl').value = '';
+
+  // Update identify button text
+  const identifyText = document.getElementById('identify-btn-text');
+  if (identifyText) {
+    identifyText.innerHTML = isHeb
+      ? 'Identify passage &amp; look up Hebrew text'
+      : 'Identify passage &amp; look up Greek text';
+  }
 }
 
 // Override doText to show Hebrew input when in Hebrew mode
