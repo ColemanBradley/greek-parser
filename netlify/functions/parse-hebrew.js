@@ -46,11 +46,11 @@ async function sheetsAppend(token, sheetId, range, values) {
 const COLUMNS = ['Lexical Form','Gloss','Part of Speech','Inflected Forms Seen','Language','Parse JSON'];
 
 async function ensureHeaders(token, sheetId, sheetName) {
-  const res = await sheetsGet(token, sheetId, `${sheetName}!A1:E1`);
+  const res = await sheetsGet(token, sheetId, `${sheetName}!A1:F1`);
   if (res.error) throw new Error(`Sheet tab error: ${JSON.stringify(res.error)}`);
   const row = res.values?.[0];
   if (!row || row[0] !== 'Lexical Form') {
-    const upd = await sheetsUpdate(token, sheetId, `${sheetName}!A1:E1`, [COLUMNS]);
+    const upd = await sheetsUpdate(token, sheetId, `${sheetName}!A1:F1`, [COLUMNS]);
     if (upd.error) throw new Error(`Header write error: ${JSON.stringify(upd.error)}`);
   }
 }

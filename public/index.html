@@ -399,8 +399,9 @@ function doGreekText() {
 
 function doVerse() {
   setActive('btn-verse');
-  document.getElementById('img-stage').style.display = 'none';
-  document.getElementById('txt-stage').style.display = 'none';
+  document.getElementById('img-stage').style.display   = 'none';
+  document.getElementById('txt-stage').style.display   = 'none';
+  document.getElementById('heb-stage').style.display   = 'none';
   document.getElementById('identify-btn').style.display = 'none';
   document.getElementById('verse-stage').style.display = 'block';
   srcFile = null; croppedDataUrl = null; hasCrop = false;
@@ -1060,8 +1061,8 @@ async function doHebrewAnalyze() {
   hideErr();
   const text       = document.getElementById('heb-input').value.trim();
   const verseActive = document.getElementById('verse-stage').style.display !== 'none';
-  const verseText  = verseActive && window._verseText ? window._verseText : null;
-  if (!srcFile && !text && !verseText) { showErr('Take a photo, upload an image, look up a verse, or type Hebrew text.'); return; }
+  const verseText   = window._verseText || null;
+  if (!srcFile && !text && !(verseActive && verseText)) { showErr('Take a photo, upload an image, look up a verse, or type Hebrew text.'); return; }
 
   const btn = document.getElementById('parse-btn');
   btn.disabled = true;
