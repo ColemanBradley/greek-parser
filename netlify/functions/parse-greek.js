@@ -199,6 +199,36 @@ async function writeParsedWords(words, language) {
   console.log(`Sheets: ${newRows.length} new, ${updates.length} updated`);
 }
 
+
+// ── Get phrase translation only (cheap — no word-by-word parsing) ──
+async function getTranslationOnly(text, language) {
+  const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+  if (!ANTHROPIC_API_KEY) return null;
+
+  const lang = language === 'hebrew' ? 'Biblical Hebrew' : 'Koine Greek';
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type':'application/json', 'x-api-key':ANTHROPIC_API_KEY, 'anthropic-version':'2023-06-01' },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 300,
+        messages: [{ role:'user', content:
+          `Translate this ${lang} phrase and provide one brief grammatical note. Respond ONLY with valid JSON, no markdown: {"english":"translation here","note":"one grammatical note or empty string"}\n\nText: ${text}`
+        }]
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) return null;
+    const raw   = data.content.map(b => b.text||'').join('');
+    const clean = raw.replace(/\`\`\`json\s*/gi,'').replace(/\`\`\`\s*/gi,'').trim();
+    return JSON.parse(clean);
+  } catch(e) {
+    console.error('Translation fetch error:', e.message);
+    return null;
+  }
+}
+
 // ── Main handler ─────────────────────────────────────────────
 exports.handler = async function(event) {
   if (event.httpMethod !== 'POST') return { statusCode: 405, body: 'Method Not Allowed' };
@@ -227,14 +257,15 @@ exports.handler = async function(event) {
         const { cached, uncached } = await checkCache(rawWords, lang);
         cachedWords = cached.map(c => c.wordData);
         if (uncached.length === 0) {
-          // Everything is cached — return immediately, no Claude call
+          // Everything cached — still get translation (uses Haiku, very cheap)
           console.log(`Full cache hit: ${cachedWords.length} words`);
+          const translation = await getTranslationOnly(manualText, language || 'greek');
           return {
             statusCode: 200,
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               words: cachedWords,
-              translation: null,
+              translation,
               fromCache: cachedWords.length,
               fromClaude: 0
             })
