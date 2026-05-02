@@ -196,6 +196,7 @@ exports.handler = async function(event) {
           const translation = await getTranslationOnly(manualText);
           return { statusCode:200, headers:{'Content-Type':'application/json'},
             body:JSON.stringify({ words:cachedWords, translation, fromCache:cachedWords.length, fromClaude:0 }) };
+        }
         if (cached.length > 0) textForClaude = uncached.join(' ');
       } catch(e) { console.error('Pre-check error:', e.message); }
     }

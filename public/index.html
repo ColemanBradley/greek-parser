@@ -1058,8 +1058,10 @@ async function doAnalyze() {
 
 async function doHebrewAnalyze() {
   hideErr();
-  const text = document.getElementById('heb-input').value.trim();
-  if (!srcFile && !text) { showErr('Take a photo, upload an image, or type Hebrew text.'); return; }
+  const text       = document.getElementById('heb-input').value.trim();
+  const verseActive = document.getElementById('verse-stage').style.display !== 'none';
+  const verseText  = verseActive && window._verseText ? window._verseText : null;
+  if (!srcFile && !text && !verseText) { showErr('Take a photo, upload an image, look up a verse, or type Hebrew text.'); return; }
 
   const btn = document.getElementById('parse-btn');
   btn.disabled = true;
@@ -1069,7 +1071,9 @@ async function doHebrewAnalyze() {
 
   try {
     let body = {};
-    if (srcFile) {
+    if (verseText) {
+      body = { manualText: verseText, language: 'hebrew' };
+    } else if (srcFile) {
       const dataUrl = croppedDataUrl || await toDataUrl(srcFile);
       const [,mime,b64] = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
       body = { imageBase64: b64, mediaType: mime, language: 'hebrew' };
